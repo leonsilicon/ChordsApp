@@ -28,8 +28,6 @@ unsafe fn convert_native_with_source(
                         CGEventField::KeyboardEventKeycode,
                         code as i64,
                     );
-
-                    // TODO: EXTRACT THIS OUT
                     CGEvent::set_integer_value_field(
                         Some(&event),
                         CGEventField::EventSourceUserData,
@@ -59,6 +57,11 @@ unsafe fn convert_native_with_source(
                 } else {
                     // For non-modifier keys, use regular key events
                     let event = CGEvent::new_keyboard_event(Some(&source), code, true)?;
+                    CGEvent::set_integer_value_field(
+                        Some(&event),
+                        CGEventField::EventSourceUserData,
+                        0xDEADBEEF,
+                    );
                     CGEvent::set_flags(Some(&event), *LAST_FLAGS.lock().unwrap());
                     Some(event)
                 }
@@ -74,6 +77,13 @@ unsafe fn convert_native_with_source(
                         CGEventField::KeyboardEventKeycode,
                         code as i64,
                     );
+                    // TODO: EXTRACT THIS OUT
+                    CGEvent::set_integer_value_field(
+                        Some(&event),
+                        CGEventField::EventSourceUserData,
+                        0xDEADBEEF,
+                    );
+
 
                     // Get current flags and update them
                     let mut new_flags = LAST_FLAGS.lock().unwrap();
@@ -97,6 +107,11 @@ unsafe fn convert_native_with_source(
                 } else {
                     // For non-modifier keys, use regular key events
                     let event = CGEvent::new_keyboard_event(Some(&source), code, false)?;
+                    CGEvent::set_integer_value_field(
+                        Some(&event),
+                        CGEventField::EventSourceUserData,
+                        0xDEADBEEF,
+                    );
                     CGEvent::set_flags(Some(&event), *LAST_FLAGS.lock().unwrap());
                     Some(event)
                 }

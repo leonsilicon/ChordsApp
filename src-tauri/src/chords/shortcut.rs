@@ -61,7 +61,14 @@ fn release_actions(shortcut: &Shortcut) -> Vec<ShortcutAction> {
         .chords
         .last()
         .into_iter()
-        .flat_map(|chord| chord.keys.iter().rev().copied().map(ShortcutAction::Release))
+        .flat_map(|chord| {
+            chord
+                .keys
+                .iter()
+                .rev()
+                .copied()
+                .map(ShortcutAction::Release)
+        })
         .collect()
 }
 

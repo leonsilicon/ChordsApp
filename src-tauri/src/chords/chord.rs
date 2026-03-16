@@ -1,8 +1,8 @@
 use crate::chords::shortcut::{press_shortcut, release_shortcut, Shortcut};
-use crate::chords::ChordFolder;
+use crate::chords::{AppChordsFile, ChordFolder};
 use crate::input::Key;
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 use tauri::AppHandle;
@@ -43,8 +43,7 @@ impl LoadedAppChords {
         // Loads all the chords from all included TOML files and parses them into struct Chord
         let mut global_chords = HashMap::new();
         let mut app_chords_files = HashMap::new();
-
-        let mut chords_by_application_id = HashMap::new();
+        let mut direct_app_chords = HashMap::new();
         for (file_path, file) in chord_folder.files_map {
             let application_id = application_id_from_chords_path(Path::new(&file_path));
 
@@ -72,31 +71,27 @@ impl LoadedAppChords {
                 }
             }
 
-            if let Some(application_id) = application_id.filter(|_| !app_chords.is_empty()) {
-                chords_by_application_id.insert(application_id.clone(), app_chords);
+            if let Some(application_id) = application_id {
+                direct_app_chords.insert(application_id.clone(), app_chords);
                 app_chords_files.insert(application_id, file);
             }
         }
 
-        // Handle inheritance of chords by extending parent chords into children, if specified
-        for (application_id, file) in &app_chords_files {
-            if let Some(config) = &file.config {
-                if let Some(ref parent_id) = config.extends {
-                    let parent_chords_opt = chords_by_application_id.get(parent_id).cloned();
-                    if let (Some(parent_chords), Some(child_chords)) = (
-                        parent_chords_opt,
-                        chords_by_application_id.get_mut(application_id),
-                    ) {
-                        // Insert parent chords only if not already present in child
-                        for (chord_string, chord) in parent_chords {
-                            child_chords
-                                .entry(chord_string.clone())
-                                .or_insert(chord.clone());
-                        }
-                    }
-                }
-            }
+        let mut resolved_chords = HashMap::new();
+        for application_id in app_chords_files.keys() {
+            resolve_app_chords(
+                application_id,
+                &app_chords_files,
+                &direct_app_chords,
+                &mut resolved_chords,
+                &mut HashSet::new(),
+            );
         }
+
+        let chords_by_application_id = resolved_chords
+            .into_iter()
+            .filter(|(_, chords)| !chords.is_empty())
+            .collect();
 
         Ok(LoadedAppChords {
             global_chords,
@@ -177,9 +172,68 @@ pub fn press_chord(handle: AppHandle, chord: &Chord) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn resolve_app_chords(
+    application_id: &str,
+    app_chords_files: &HashMap<String, AppChordsFile>,
+    direct_app_chords: &HashMap<String, ChordMap>,
+    resolved_chords: &mut HashMap<String, ChordMap>,
+    visiting: &mut HashSet<String>,
+) -> ChordMap {
+    if let Some(chords) = resolved_chords.get(application_id) {
+        return chords.clone();
+    }
+
+    if !visiting.insert(application_id.to_string()) {
+        log::warn!(
+            "Detected circular _config.extends chain while loading chords for {}",
+            application_id
+        );
+        return direct_app_chords
+            .get(application_id)
+            .cloned()
+            .unwrap_or_default();
+    }
+
+    let mut merged_chords = HashMap::new();
+
+    if let Some(parent_id) = app_chords_files
+        .get(application_id)
+        .and_then(|file| file.config.as_ref())
+        .and_then(|config| config.extends.as_deref())
+    {
+        if app_chords_files.contains_key(parent_id) {
+            merged_chords = resolve_app_chords(
+                parent_id,
+                app_chords_files,
+                direct_app_chords,
+                resolved_chords,
+                visiting,
+            );
+        } else {
+            log::warn!(
+                "Application {} extends missing parent {}",
+                application_id,
+                parent_id
+            );
+        }
+    }
+
+    if let Some(child_chords) = direct_app_chords.get(application_id) {
+        for (sequence, chord) in child_chords {
+            merged_chords.insert(sequence.clone(), chord.clone());
+        }
+    }
+
+    visiting.remove(application_id);
+    resolved_chords.insert(application_id.to_string(), merged_chords.clone());
+    merged_chords
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chords::AppChordsFile;
+    use std::collections::HashMap;
 
     #[test]
     fn derives_application_id_from_app_path() {
@@ -194,6 +248,86 @@ mod tests {
         let application_id = application_id_from_chords_path(Path::new("chords.toml"));
 
         assert_eq!(application_id, None);
+    }
+
+    #[test]
+    fn extends_only_child_inherits_parent_chords() {
+        let chord_folder = ChordFolder {
+            files_map: HashMap::from([
+                (
+                    "com/jetbrains/intellij/chords.toml".to_string(),
+                    AppChordsFile::parse(
+                        r#"
+                        a = { name = "Parent chord" }
+                        "#,
+                    )
+                    .unwrap(),
+                ),
+                (
+                    "com/jetbrains/rubymine/chords.toml".to_string(),
+                    AppChordsFile::parse(
+                        r#"
+                        _config = { extends = "com.jetbrains.intellij" }
+                        "#,
+                    )
+                    .unwrap(),
+                ),
+            ]),
+        };
+
+        let loaded = LoadedAppChords::from_folder(chord_folder).unwrap();
+        let inherited = loaded.get_chord(
+            &Key::parse_sequence("a").unwrap(),
+            Some("com.jetbrains.rubymine".to_string()),
+        );
+
+        assert!(inherited.is_some());
+        assert!(loaded
+            .app_specific_chords
+            .contains_key("com.jetbrains.rubymine"));
+    }
+
+    #[test]
+    fn chained_extends_inherits_through_intermediate_app() {
+        let chord_folder = ChordFolder {
+            files_map: HashMap::from([
+                (
+                    "com/jetbrains/intellij/chords.toml".to_string(),
+                    AppChordsFile::parse(
+                        r#"
+                        a = { name = "Grandparent chord" }
+                        "#,
+                    )
+                    .unwrap(),
+                ),
+                (
+                    "com/jetbrains/idea/chords.toml".to_string(),
+                    AppChordsFile::parse(
+                        r#"
+                        _config = { extends = "com.jetbrains.intellij" }
+                        "#,
+                    )
+                    .unwrap(),
+                ),
+                (
+                    "com/jetbrains/rubymine/chords.toml".to_string(),
+                    AppChordsFile::parse(
+                        r#"
+                        _config = { extends = "com.jetbrains.idea" }
+                        "#,
+                    )
+                    .unwrap(),
+                ),
+            ]),
+        };
+
+        let loaded = LoadedAppChords::from_folder(chord_folder).unwrap();
+        let inherited = loaded.get_chord(
+            &Key::parse_sequence("a").unwrap(),
+            Some("com.jetbrains.rubymine".to_string()),
+        );
+
+        assert!(inherited.is_some());
     }
 }
 

@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "Capability for the settings window",
+  "windows": ["settings"],
+  "permissions": [
+    "core:default",
+    "autostart:default",
+    "log:default",
+    "macos-permissions:default",
+    "core:window:default",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:window:allow-unminimize"
+  ]
+}

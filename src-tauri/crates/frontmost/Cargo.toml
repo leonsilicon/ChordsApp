@@ -1,0 +1,16 @@
+[package]
+name = "frontmost"
+version = "1.1.0"
+edition = "2021"
+authors = ["Kieran Llarena"]
+description = "A trait-based Rust crate for tracking the currently focused application on macOS via NSWorkspace notifications with thread-safe state management."
+license = "MIT"
+repository = "https://github.com/kllarena07/frontmost"
+keywords = ["macos", "objc", "trait-based", "thread-safe", "nsworkspace"]
+categories = ["os", "api-bindings"]
+
+[dependencies]
+log = "0.4.29"
+objc2 = "0.6.2"
+objc2-app-kit = "0.3.1"
+objc2-foundation = "0.3.1"

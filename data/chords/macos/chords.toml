@@ -1,0 +1,6 @@
+# Example using `shell`
+"/f" = { name = "Finder", command = "Finder", shell = "open -a Finder" }
+
+# Example using `shortcut`
+# A MacOS Shortcut that even power users aren't likely to rebind
+"/q" = { name = "Force Quit", command = "Force Quit", shortcut = "cmd+opt+esc" }

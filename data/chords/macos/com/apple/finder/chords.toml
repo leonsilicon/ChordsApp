@@ -1,0 +1,2 @@
+ga = { name = "Goto Applications", shortcut = "cmd+shift+a" }
+ss = { name = "Sort by Size", shortcut = "cmd+opt+cmd+6" }

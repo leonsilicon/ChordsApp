@@ -1,0 +1,61 @@
+[package]
+name = "chords"
+version = "0.1.0"
+description = "shortcuts reimagined"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "chords_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+cc = "1.0"
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2.6"
+enigo = { version = "0.6", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-user-input = "0.1.1"
+tauri-plugin-macos-permissions = "2.3.0"
+tauri-plugin-single-instance = "2.4.0"
+tauri-plugin-log = "2"
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
+log = "0.4.29"
+rdev = { version = "0.6", features = ["unstable_grab"] }
+observable-property = "0.4.2"
+tauri-plugin-global-shortcut = "2.3.1"
+toml = "1.0.6"
+anyhow = "1.0"
+objc2 = "0.6.2"
+objc2-app-kit = "0.3.1"
+objc2-foundation = "0.3.1"
+libc = "0.2"
+bitflags = "2.11"
+arc-swap = "1.8"
+parking_lot = { version = "0.12", features = ["deadlock_detection"] }
+frontmost = "1.1.0"
+keycode = "1"
+include_dir = { version = "0.7", features = ["glob"] }
+device_query = "4"
+bijective-enum-map = "0.1.0"
+walkdir = "2.5.0"
+gix = {  version = "0.80.0", features = ["blocking-http-transport-reqwest-rust-tls"] }
+macos-accessibility-client = "0.0.2"
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-autostart = "2.5.1"
+
+[patch.crates-io]
+rdev = { path = "./crates/rdev" }
+frontmost = { path = "./crates/frontmost" }

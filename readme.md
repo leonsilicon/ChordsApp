@@ -50,7 +50,7 @@ To run a chord, you need to have the **Chords** app installed and running in the
 _Chord Mode_ stays active as long as the `Space` key is pressed down. In _Chord Mode_, you can type a sequence of letters and/or numbers that corresponds to a defined chord. One way to run a chord is by typing the sequence followed by the `Caps Lock` key:
 
 <details>
-  <summary>`/f⇪`</summary>
+  <summary>/f⇪</summary>
 
   1. Press(Slash)
   2. Release(Slash)
@@ -69,7 +69,7 @@ _Chord Mode_ stays active as long as the `Space` key is pressed down. In _Chord 
 You can run a chord multiple times by pressing `Caps Lock` again. Pressing the following sequence of keys in _Chord Mode_ goes up three folders in Finder:
 
 <details>
-  <summary>`/f⇪⇪⇪`</summary>
+  <summary>/f⇪⇪⇪</summary>
 
   1. Click(Slash)
   2. Click(F)
@@ -81,7 +81,7 @@ You can run a chord multiple times by pressing `Caps Lock` again. Pressing the f
 Another way to run a chord is by holding `Shift` while typing the last key of the chord:
 
 <details>
-  <summary>`/F`</summary>
+  <summary>/F</summary>
 
   1. Click(Slash)
   2. Press(Shift)
@@ -94,7 +94,7 @@ This second method is useful for running multiple chords that share a similar pr
 As an example, say you wanted to quickly toggle the tabs view, the sidebar view, and the preview in Finder. Instead of typing out the entirety of three separate chords:
 
 <details>
-  <summary>`tTtStP`</summary>
+  <summary>tTtStP</summary>
 
   1. Click(T)
   2. Press(Shift)
@@ -113,7 +113,7 @@ As an example, say you wanted to quickly toggle the tabs view, the sidebar view,
 You can just type:
 
 <details>
-  <summary>`tTSP`</summary>
+  <summary>tTSP</summary>
 
   1. Click(T)
   3. Press(Shift)
@@ -141,7 +141,7 @@ You can just type:
 While it might seem a bit tedious to press `Caps Lock` or `Shift`, it's actually a lot smoother in practice since both `Caps Lock` and `Shift` are relatively easy to reach compared to modifier keys. In addition, because chords don't use modifier keys, you're able to use any existing shortcuts while _Chord Mode_ is active. The following sequence of keys will move all the contents of your Downloads folder into a new folder:
 
 <details>
-  <summary>`/FgD⌘ands⇪`</summary>
+  <summary>/FgD⌘ands⇪</summary>
 
   1. Click(Slash)
   2. Press(Shift)

@@ -1,7 +1,5 @@
-use crate::constants::{ QUIT_MENU_ID, SETTINGS_MENU_ID };
+use crate::constants::{QUIT_MENU_ID, SETTINGS_MENU_ID};
 use crate::tauri_app::settings::show_settings_window;
-use crate::AppContext;
-use tauri::Manager;
 use tauri::{
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -19,18 +17,16 @@ pub fn create_tray(handle: AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .tooltip("Chords")
         .show_menu_on_left_click(false)
-        .on_menu_event(|handle, event| {
-            match event.id().as_ref() {
-                SETTINGS_MENU_ID => {
-                    if let Err(e) = show_settings_window(handle.clone()) {
-                        log::error!("Failed to show settings window: {e}");
-                    }
+        .on_menu_event(|handle, event| match event.id().as_ref() {
+            SETTINGS_MENU_ID => {
+                if let Err(e) = show_settings_window(handle.clone()) {
+                    log::error!("Failed to show settings window: {e}");
                 }
-                QUIT_MENU_ID => {
-                    handle.exit(0);
-                }
-                _ => {}
             }
+            QUIT_MENU_ID => {
+                handle.exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {

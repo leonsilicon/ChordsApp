@@ -23,6 +23,9 @@ pub fn setup_app(app: &mut App) -> Result<()> {
 
     tauri_app::tray::create_tray(handle.clone()).context("failed to create tray")?;
 
+    tauri_app::settings::configure_settings_window(handle.clone())
+        .context("failed to configure settings window")?;
+
     {
         let handle = handle.clone();
         tauri::async_runtime::spawn(async move {

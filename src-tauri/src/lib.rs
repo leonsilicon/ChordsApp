@@ -85,13 +85,18 @@ pub fn run() {
         .level(log::LevelFilter::Debug)
         .targets([
             Target::new(TargetKind::Stdout),
-            Target::new(TargetKind::LogDir { file_name: Some("chords".into()) }),
+            Target::new(TargetKind::LogDir {
+                file_name: Some("chords".into()),
+            }),
             Target::new(TargetKind::Webview),
         ])
         .build();
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            tauri_app::commands::list_git_repos,
+            tauri_app::commands::add_git_repo_command,
+            tauri_app::commands::sync_git_repo_command,
             tauri_app::commands::open_accessibility_settings,
             tauri_app::commands::open_input_monitoring_settings,
         ])

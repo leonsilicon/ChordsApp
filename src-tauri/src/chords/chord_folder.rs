@@ -36,6 +36,9 @@ impl ChordFolder {
             .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?;
 
         let chords_dir = root.join("chords");
+        if !chords_dir.exists() {
+            return Ok(Self { files_map });
+        }
 
         for entry in WalkDir::new(&chords_dir) {
             let entry = entry?;
@@ -54,5 +57,9 @@ impl ChordFolder {
         }
 
         Ok(Self { files_map })
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        self.files_map.extend(other.files_map);
     }
 }

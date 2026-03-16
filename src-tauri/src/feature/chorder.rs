@@ -88,7 +88,7 @@ impl Chorder {
                 self.ensure_active(handle.clone())?;
 
                 let context = handle.state::<AppContext>();
-                let loaded_app_chords = &context.loaded_app_chords;
+                let loaded_app_chords = context.loaded_app_chords.read();
                 let state = self.state.get()?;
                 let key_buffer = state.key_buffer.clone();
 
@@ -204,10 +204,11 @@ impl Chorder {
         };
 
         let frontmost_application_id = context.frontmost_application_id.load().as_ref().clone();
-        let Some(chord) = context
-            .loaded_app_chords
-            .get_chord(&sequence, frontmost_application_id)
-        else {
+        let chord = {
+            let loaded_app_chords = context.loaded_app_chords.read();
+            loaded_app_chords.get_chord(&sequence, frontmost_application_id)
+        };
+        let Some(chord) = chord else {
             // We don't change the state for an invalid sequence
             log::debug!("Invalid sequence {:?}", sequence);
             return Ok(());

@@ -91,7 +91,6 @@ impl AppModeStateMachine {
         }
     }
 
-
     // We always consume the event in chord mode
     fn handle_chord_mode_event(&self, event: &KeyEvent) -> bool {
         let modifiers = Key::modifiers();
@@ -112,7 +111,7 @@ impl AppModeStateMachine {
                 }
 
                 let Some(device_state) = &self.device_state else {
-                     return false;
+                    return false;
                 };
 
                 let device_keys = device_state.get_keys();

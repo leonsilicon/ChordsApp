@@ -17,14 +17,6 @@ mod mode;
 mod tauri_app;
 
 tauri_panel! {
-    panel!(OverlayPanel {
-        config: {
-            can_become_key_window: true,
-            can_become_main_window: false,
-            is_floating_panel: true,
-            hides_on_deactivate: false
-        }
-    })
     panel!(IndicatorPanel {
         config: {
             can_become_key_window: true,
@@ -102,8 +94,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             tauri_app::commands::open_accessibility_settings,
             tauri_app::commands::open_input_monitoring_settings,
-            tauri_app::commands::hide_overlay,
-            tauri_app::commands::show_overlay,
         ])
         .plugin(log_plugin)
         .plugin(tauri_plugin_single_instance::init(|handle, _args, _cwd| {

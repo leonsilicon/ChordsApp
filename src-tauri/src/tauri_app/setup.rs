@@ -1,5 +1,5 @@
 use crate::input::{register_caps_lock_input_handler, register_key_event_input_grabber};
-use crate::{commands, initialize_app_context, tauri_app, Frontmost};
+use crate::{initialize_app_context, tauri_app, Frontmost};
 use anyhow::{Context, Result};
 use frontmost::{start_nsrunloop, Detector};
 use std::thread;
@@ -52,31 +52,6 @@ pub fn setup_app(app: &mut App) -> Result<()> {
             }
         });
     }
-
-    use tauri_plugin_global_shortcut::{
-        Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-    };
-
-    let ctrl_n_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyN);
-    {
-        let handle = handle.clone();
-        app.handle().plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |_app, shortcut, event| {
-                    println!("{:?}", shortcut);
-                    if shortcut == &ctrl_n_shortcut {
-                        if event.state() == ShortcutState::Pressed {
-                            if let Err(e) = commands::show_overlay(handle.clone()) {
-                                log::error!("Failed to show overlay: {e}");
-                            }
-                        }
-                    }
-                })
-                .build(),
-        )?;
-    }
-
-    app.global_shortcut().register(ctrl_n_shortcut)?;
 
     if let Err(error) = tauri_app::settings::hide_settings_window(handle.clone()) {
         log::error!("failed to hide settings window at startup: {error}");

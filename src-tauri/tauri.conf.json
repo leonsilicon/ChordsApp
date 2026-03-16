@@ -22,22 +22,6 @@
         "center": true
       },
       {
-        "label": "overlay",
-        "title": "Chords Overlay",
-        "width": 1280,
-        "height": 800,
-        "visible": false,
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "maximizable": false,
-        "minimizable": false,
-        "visibleOnAllWorkspaces": true,
-        "shadow": false
-      },
-      {
         "label": "indicator",
         "title": "Chord Mode Indicator",
         "width": 240,

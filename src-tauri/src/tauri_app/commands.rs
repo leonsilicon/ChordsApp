@@ -1,6 +1,3 @@
-use crate::AppContext;
-use tauri::{AppHandle, Manager};
-
 fn open_system_settings(url: &str, permission_name: &str) {
     if let Err(error) = std::process::Command::new("open").arg(url).spawn() {
         log::error!("Failed to open {permission_name} settings: {error}");
@@ -21,22 +18,4 @@ pub fn open_input_monitoring_settings() {
         "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
         "input monitoring",
     );
-}
-
-#[tauri::command]
-pub fn hide_overlay(handle: AppHandle) -> tauri::Result<()> {
-    let context = handle.state::<AppContext>();
-    context
-        .clicker
-        .ensure_inactive(handle.clone())
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn show_overlay(handle: AppHandle) -> tauri::Result<()> {
-    let context = handle.state::<AppContext>();
-    context
-        .clicker
-        .ensure_active(handle.clone())
-        .map_err(Into::into)
 }

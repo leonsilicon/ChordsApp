@@ -189,7 +189,7 @@ export function SettingsWindow() {
         <div>
           <h1 className="text-[20px] font-semibold">Chords</h1>
           <p className="mt-1 text-muted-foreground">
-            Configure the tray app, the fullscreen overlay, and the global shortcut.
+            Configure the tray app, and the global shortcut.
           </p>
         </div>
 

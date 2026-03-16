@@ -10,19 +10,11 @@ pub fn handle_key_event(handle: AppHandle, key_event: KeyEvent) -> Result<()> {
 
     match app_mode {
         AppMode::Chord => {
-            context.clicker.ensure_inactive(handle.clone())?;
             context
                 .chorder
                 .handle_key_event(handle.clone(), &key_event)?;
         }
-        AppMode::Overlay => {
-            context.chorder.ensure_inactive(handle.clone())?;
-            context
-                .clicker
-                .handle_key_event(handle.clone(), &key_event)?;
-        }
         AppMode::None => {
-            context.clicker.ensure_inactive(handle.clone())?;
             context.chorder.ensure_inactive(handle.clone())?;
         }
     }

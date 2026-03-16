@@ -1,10 +1,7 @@
 use crate::chords::{ChordFolder, LoadedAppChords};
 use crate::feature::Chorder;
-use crate::feature::Clicker;
 use crate::{
-    feature::{
-        post_manage_setup_clicker_frontend_sync, ChorderIndicatorPanel, ClickerOverlayPanel,
-    },
+    feature::ChorderIndicatorPanel,
     input::KeyEventState,
     mode::{AppMode, AppModeStateMachine},
 };
@@ -18,7 +15,6 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
 pub struct AppContext {
-    pub clicker: Clicker,
     pub chorder: Chorder,
 
     pub device_state: Option<DeviceState>,
@@ -31,7 +27,7 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn new(clicker: Clicker, chorder: Chorder) -> Result<Self> {
+    pub fn new(chorder: Chorder) -> Result<Self> {
         let device_state = if macos_accessibility_client::accessibility::application_is_trusted() {
             Some(DeviceState {})
         } else {
@@ -46,7 +42,6 @@ impl AppContext {
             key_event_state: KeyEventState::new(app_mode_state_machine.clone()),
             loaded_app_chords: LoadedAppChords::from_folder(ChordFolder::load_bundled()?)?,
             app_mode_state_machine,
-            clicker,
             chorder,
         })
     }
@@ -57,13 +52,6 @@ impl AppContext {
 }
 
 pub fn initialize_app_context(app: AppHandle) -> Result<()> {
-    let clicker = {
-        let window = app
-            .get_webview_window(crate::constants::OVERLAY_WINDOW_LABEL)
-            .ok_or(anyhow::anyhow!("overlay window not found"))?;
-        Clicker::new(ClickerOverlayPanel::from_window(window)?)
-    };
-
     let chorder = {
         let window = app
             .get_webview_window(crate::constants::INDICATOR_WINDOW_LABEL)
@@ -71,7 +59,7 @@ pub fn initialize_app_context(app: AppHandle) -> Result<()> {
         Chorder::new(ChorderIndicatorPanel::from_window(window)?)
     };
 
-    let mut context = AppContext::new(clicker, chorder)?;
+    let mut context = AppContext::new(chorder)?;
 
     // Setting the frontmost application immediately (the frontmost crate only detects changes)
     let workspace = NSWorkspace::sharedWorkspace();
@@ -106,7 +94,6 @@ pub fn initialize_app_context(app: AppHandle) -> Result<()> {
         LoadedAppChords::from_folder(ChordFolder::load_from_git_repo(&repo)?)?;
 
     app.manage(context);
-    post_manage_setup_clicker_frontend_sync(app);
 
     Ok(())
 }

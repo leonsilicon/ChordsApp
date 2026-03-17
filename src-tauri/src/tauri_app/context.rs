@@ -6,7 +6,7 @@ use crate::{
     input::KeyEventState,
     mode::{AppMode, AppModeStateMachine},
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 use arc_swap::ArcSwap;
 use device_query::DeviceState;
 use keycode::KeyMappingCode::*;
@@ -40,7 +40,7 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn new(chorder: Chorder) -> Result<Self> {
+    pub fn new(chorder: Chorder, bundled_app_chords: LoadedAppChords) -> Self {
         let device_state = if macos_accessibility_client::accessibility::application_is_trusted() {
             Some(DeviceState {})
         } else {
@@ -49,16 +49,14 @@ impl AppContext {
 
         let app_mode_state_machine = Arc::new(AppModeStateMachine::new(device_state.clone()));
 
-        Ok(Self {
+        Self {
             device_state,
             frontmost_application_id: ArcSwap::new(Arc::new(None)),
             key_event_state: KeyEventState::new(app_mode_state_machine.clone()),
-            loaded_app_chords: RwLock::new(LoadedAppChords::from_folder(
-                ChordFolder::load_bundled()?,
-            )?),
+            loaded_app_chords: RwLock::new(bundled_app_chords),
             app_mode_state_machine,
             chorder,
-        })
+        }
     }
 
     pub fn get_app_mode(&self) -> AppMode {
@@ -73,8 +71,11 @@ pub fn initialize_app_context(app: AppHandle) -> Result<()> {
             .ok_or(anyhow::anyhow!("chord indicator window not found"))?;
         Chorder::new(ChorderIndicatorPanel::from_window(window)?)
     };
+    let bundled_app_chords = LoadedAppChords::from_folder(
+        ChordFolder::load_bundled()?,
+    )?;
 
-    let context = AppContext::new(chorder)?;
+    let context = AppContext::new(chorder, bundled_app_chords);
 
     // Setting the frontmost application immediately (the frontmost crate only detects changes)
     let workspace = NSWorkspace::sharedWorkspace();
@@ -87,7 +88,7 @@ pub fn initialize_app_context(app: AppHandle) -> Result<()> {
     }
 
     app.manage(context);
-    reload_loaded_app_chords(&app)?;
+    reload_loaded_app_chords(&app).context("failed to reload app chords")?;
 
     Ok(())
 }

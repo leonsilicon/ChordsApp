@@ -53,7 +53,7 @@ walkdir = "2.5.0"
 gix = {  version = "0.80.0", features = ["blocking-http-transport-reqwest-rust-tls"] }
 macos-accessibility-client = "0.0.2"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
-mlua = { version  = "0.11.6", features = ["luau", "send", "error-send"] }
+mlua = { version  = "0.11.6", features = ["lua54", "send", "error-send"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.1"

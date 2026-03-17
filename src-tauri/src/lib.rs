@@ -131,7 +131,7 @@ pub fn run() {
         .plugin(tauri_plugin_user_input::init())
         .setup(|app| {
             if let Err(e) = tauri_app::setup::setup_app(app) {
-                log::error!("Failed to initialize app context: {e}");
+                log::error!("Failed to set up app:\n{:#?}", e);
 
                 app.handle()
                     .dialog()

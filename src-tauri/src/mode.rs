@@ -2,7 +2,6 @@ use crate::input::{Key, KeyEvent};
 use device_query::{DeviceQuery, DeviceState};
 use keycode::KeyMappingCode;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use rdev::{simulate, EventType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {

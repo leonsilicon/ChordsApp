@@ -48,7 +48,6 @@ impl ChorderIndicatorPanel {
     }
 
     fn show(&self, handle: AppHandle) -> Result<()> {
-        return Ok(());
         log::debug!("Showing chorder panel");
         let panel = self.panel.clone();
         let is_visible = self.is_visible.clone();

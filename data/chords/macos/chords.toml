@@ -1,3 +1,4 @@
+[chords]
 # Example using `shell`
 "/f" = { name = "Finder", command = "Finder", shell = "open -a Finder" }
 

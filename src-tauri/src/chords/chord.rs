@@ -12,7 +12,6 @@ use tauri::AppHandle;
 pub struct Chord {
     pub keys: Vec<Key>,
     pub name: String,
-    pub command: Option<String>,
     pub shortcut: Option<Shortcut>,
     pub shell: Option<String>,
     pub lua: Option<String>
@@ -176,7 +175,7 @@ impl LoadedAppChords {
 
             let config = file.config.clone();
             let app_chord_runtime = ChordRuntime::from_file_shallow(file)?;
-            log::debug!("Loaded {} chords for application ID {}", app_chord_runtime.chords.len(), application_id);
+            log::debug!("Loaded {} initial chords for application ID {}", app_chord_runtime.chords.len(), application_id);
             app_runtime_map.insert(application_id.clone(), app_chord_runtime);
             app_config_map.insert(application_id, config);
         }

@@ -5,44 +5,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RawAppChordsFile {
-    #[serde(rename = "_config")]
-    pub config: Option<AppChordsFileConfig>,
-
-    // Needs to be toml::Value because otherwise parsing will fail
-    #[serde(flatten)]
-    pub chords: HashMap<String, toml::Value>,
-}
-
-#[derive(Debug, Serialize)]
 pub struct AppChordsFile {
-    #[serde(rename = "_config")]
     pub config: Option<AppChordsFileConfig>,
-
-    #[serde(flatten)]
     pub chords: HashMap<String, AppChordMapValue>,
 }
 
 impl AppChordsFile {
     pub fn parse(content: &str) -> Result<Self> {
-        let parsed: RawAppChordsFile = toml::from_str(content)?;
-
-        let mut chords = HashMap::new();
-        for (key, value) in parsed.chords {
-            match value.try_into() {
-                Ok(chord) => {
-                    chords.insert(key, chord);
-                }
-                Err(error) => {
-                    log::warn!("Skipping invalid chord entry {}: {}", key, error);
-                }
-            }
-        }
-
-        Ok(AppChordsFile {
-            config: parsed.config,
-            chords,
-        })
+        Ok(toml::from_str(content)?)
     }
 
     pub fn get_chords_shallow(&self) -> Result<HashMap<Vec<Key>, Chord>> {
@@ -54,14 +24,16 @@ impl AppChordsFile {
                 AppChordMapValue::Multiple(entries) => entries.first(),
             };
 
-            let Some(entry) = entry else { continue };
+            let Some(entry) = entry else {
+                log::warn!("Skipping invalid chord entry for sequence: {}", sequence);
+                continue;
+            };
 
             let keys = Key::parse_sequence(sequence)?;
 
             let chord = Chord {
                 keys: keys.clone(),
                 name: entry.name.clone(),
-                command: entry.command.clone(),
                 shortcut: entry
                     .shortcut
                     .as_ref()
@@ -93,7 +65,6 @@ pub struct AppChordsFileConfigLua {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppChord {
     pub name: String,
-    pub command: Option<String>,
     pub shortcut: Option<String>,
     pub shell: Option<String>,
     pub lua: Option<String>

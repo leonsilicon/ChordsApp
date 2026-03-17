@@ -1,4 +1,4 @@
-use mlua::Lua;
+use mlua::{Lua, LuaOptions, StdLib};
 use crate::chords::{press_shortcut, release_shortcut, Shortcut};
 use anyhow::Result;
 
@@ -9,7 +9,10 @@ pub struct ChordLuaRuntime {
 
 impl ChordLuaRuntime {
     pub fn new(init_scripts: Vec<String>) -> Result<Self> {
-        let lua = Lua::new();
+        let lua = Lua::new_with(
+            StdLib::ALL,
+            LuaOptions::default()
+        )?;
         let globals = lua.globals();
 
         globals.set("press", lua.create_function(|_, key: String| {

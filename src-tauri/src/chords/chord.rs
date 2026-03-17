@@ -219,6 +219,7 @@ impl LoadedAppChords {
 }
 
 pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> Result<()> {
+    log::debug!("Pressing chord: {:?}", chord);
     let shortcut = chord.shortcut.clone();
     let shell = chord.shell.clone();
     let lua = chord.lua.clone();
@@ -273,6 +274,8 @@ pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> 
                 log::error!("missing lua runtime");
                 return;
             };
+
+            log::debug!("Executing lua: {}", lua);
             if let Err(e) = lua_runtime.lua.load(lua).exec() {
                 log::error!("failed to execute lua: {e}");
             }

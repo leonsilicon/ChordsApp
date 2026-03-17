@@ -1,5 +1,5 @@
 use crate::chords::shortcut::{press_shortcut, release_shortcut, Shortcut};
-use crate::chords::{AppChordsFile, AppChordsFileConfig, ChordFolder};
+use crate::chords::{AppChordsFile, AppChordsFileConfig, AppChordsFileConfigLua, ChordFolder, ChordLuaRuntime};
 use crate::input::Key;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
@@ -15,6 +15,7 @@ pub struct Chord {
     pub command: Option<String>,
     pub shortcut: Option<Shortcut>,
     pub shell: Option<String>,
+    pub lua: Option<String>
 }
 
 pub struct LoadedAppChords {
@@ -24,15 +25,14 @@ pub struct LoadedAppChords {
 
 pub struct ChordRuntime {
     pub chords: HashMap<Vec<Key>, Chord>,
-    pub lua: Option<Lua>
+    pub lua_runtime: Option<ChordLuaRuntime>,
 }
 
 impl ChordRuntime {
-
     pub fn from_chords_no_lua(chords: HashMap<Vec<Key>, Chord>) -> Self {
         Self {
             chords,
-            lua: None,
+            lua_runtime: None,
         }
     }
 
@@ -44,26 +44,37 @@ impl ChordRuntime {
             sequence
                 .first()
                 .is_some_and(|c| c.is_digit() || c.is_letter())
-        });;
+        });
 
-        let lua = if let Some(AppChordsFileConfig { lua: Some(lua_config), .. }) = chord_file.config {
-            let lua = Lua::new();
-            if let Some(init_script) = &lua_config.init {
-                lua.load(init_script).exec()?;
-            }
-            Some(lua)
-        } else {
-            None
-        };
+        // TODO: lua runtime should be none if no _config.lua
+        let lua_init_scripts = chord_file
+            .config
+            .as_ref()
+            .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
+            .and_then(|lua_config| lua_config.init.clone())
+            .into_iter()
+            .collect::<Vec<_>>();
+        let lua_runtime = ChordLuaRuntime::new(lua_init_scripts)?;
 
-        Ok(Self {
-            chords,
-            lua
-        })
+        Ok(Self { chords, lua_runtime: Some(lua_runtime) })
     }
 
-    pub fn merge_chords_from(&mut self, base: &Self) {
-        // TODO: implement
+    pub fn extend_runtime(&mut self, base: &Self) -> Result<()> {
+        for (sequence, chord) in &base.chords {
+            self.chords
+                .entry(sequence.clone())
+                .or_insert_with(|| chord.clone());
+        }
+
+        let mut lua_init_scripts = base.lua_runtime.as_ref().map(|r| r.lua_init_scripts.clone()).unwrap_or_default();
+        lua_init_scripts.extend(self.lua_runtime.as_ref().map(|r| r.lua_init_scripts.clone()).unwrap_or_default());
+        self.lua_runtime = Some(ChordLuaRuntime::new(lua_init_scripts.clone())?);
+
+        Ok(())
+    }
+
+    pub fn get_chord(&self, sequence: &[&Key]) -> Option<&Chord> {
+        self.chords.get(sequence)
     }
 }
 
@@ -82,10 +93,65 @@ fn application_id_from_chords_path(file_path: &Path) -> Option<String> {
     )
 }
 
+fn resolve_runtime_extends(
+    application_id: &str,
+    app_runtime_map: &mut HashMap<String, ChordRuntime>,
+    app_config_map: &HashMap<String, Option<AppChordsFileConfig>>,
+    resolved: &mut HashSet<String>,
+    resolving: &mut HashSet<String>,
+) -> Result<()> {
+    if resolved.contains(application_id) {
+        return Ok(());
+    }
+
+    if !resolving.insert(application_id.to_string()) {
+        log::warn!("Circular extends detected for application ID: {application_id}");
+        return Ok(());
+    }
+
+    let extends = app_config_map
+        .get(application_id)
+        .and_then(|config| config.as_ref())
+        .and_then(|config| config.extends.clone());
+
+    if let Some(base_application_id) = extends {
+        if app_runtime_map.contains_key(&base_application_id) {
+            resolve_runtime_extends(
+                &base_application_id,
+                app_runtime_map,
+                app_config_map,
+                resolved,
+                resolving,
+            )?;
+
+            let Some(mut app_runtime) = app_runtime_map.remove(application_id) else {
+                resolving.remove(application_id);
+                return Ok(());
+            };
+
+            if let Some(base_runtime) = app_runtime_map.get(&base_application_id) {
+                app_runtime.extend_runtime(base_runtime)?;
+            }
+
+            app_runtime_map.insert(application_id.to_string(), app_runtime);
+        } else {
+            log::warn!(
+                "Invalid extends for application ID {application_id}: {base_application_id}"
+            );
+        }
+    }
+
+    resolving.remove(application_id);
+    resolved.insert(application_id.to_string());
+
+    Ok(())
+}
+
 impl LoadedAppChords {
     pub fn from_folder(chord_folder: ChordFolder) -> Result<Self> {
         let mut global_chords = HashMap::new();
-        let mut app_chord_runtime_map = HashMap::new();
+        let mut app_runtime_map = HashMap::new();
+        let mut app_config_map = HashMap::new();
 
         for (file_path, file) in chord_folder.files_map {
             let Some(application_id) = application_id_from_chords_path(Path::new(&file_path)) else {
@@ -101,40 +167,34 @@ impl LoadedAppChords {
                 }
             }
 
+            let config = file.config.clone();
             let app_chord_runtime = ChordRuntime::from_file_shallow(file)?;
-            app_chord_runtime_map.insert(application_id.clone(), (app_chord_runtime, file.config.clone()));
+            app_runtime_map.insert(application_id.clone(), app_chord_runtime);
+            app_config_map.insert(application_id, config);
         }
 
-        // Loop through each config and resolve _extends
-        for (_, (mut app_chord_runtime, config)) in app_chord_runtime_map.iter_mut() {
-            if let Some(AppChordsFileConfig { extends: Some(extends), .. }) = &config {
-                if let Some(base_runtime) = app_chord_runtime_map.get(extends).map(|(r, _)| r) {
-                    app_chord_runtime.merge_chords_from(base_runtime);
-                } else {
-                    log::warn!("Invalid extends for application ID: {extends}");
-                }
-            }
-        }
+        let application_ids = app_runtime_map.keys().cloned().collect::<Vec<_>>();
+        let mut resolved = HashSet::new();
+        let mut resolving = HashSet::new();
 
-        // let mut resolved_chords = HashMap::new();
-        // for application_id in app_chord_runtime_map.keys() {
-        //     resolve_app_chords(
-        //         application_id,
-        //         &app_chords_files,
-        //         &direct_app_chords,
-        //         &mut resolved_chords,
-        //         &mut HashSet::new(),
-        //     );
-        // }
+        for application_id in application_ids {
+            resolve_runtime_extends(
+                &application_id,
+                &mut app_runtime_map,
+                &app_config_map,
+                &mut resolved,
+                &mut resolving,
+            )?;
+        }
 
         Ok(LoadedAppChords {
             global_runtime: ChordRuntime::from_chords_no_lua(global_chords),
-            app_runtime_map: app_chord_runtime_map,
+            app_runtime_map,
         })
     }
 
     // No application = global chord
-    pub fn get_chord_runtime(&self, sequence: &[Key], application_id: Option<String>) -> Option<&ChordRuntime> {
+    pub fn get_chord_runtime(&self, sequence: &[Key], application_id: Option<String>) -> &ChordRuntime {
         // Prefer app chord, fall back to global
         let chord_runtime = if let Some(app_id) = application_id {
             self.app_runtime_map
@@ -143,19 +203,25 @@ impl LoadedAppChords {
             &self.global_runtime
         };
 
-        if chord_runtime.chords.contains_key(sequence) {
-            Some(chord_runtime)
-        } else {
-            None
-        }
+        chord_runtime
     }
 }
 
-pub fn press_chord(handle: AppHandle, chord: &Chord) -> anyhow::Result<()> {
+pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> Result<()> {
     let shortcut = chord.shortcut.clone();
     let shell = chord.shell.clone();
+    let lua = chord.lua.clone();
     handle.clone().run_on_main_thread(move || {
-        if let Some(shell) = shell {
+        // Prioritize shortcuts
+        if let Some(shortcut) = shortcut {
+            if let Some(shortcut) = shortcut {
+                if let Err(e) = press_shortcut(shortcut.clone()) {
+                    log::error!("failed to press shortcut: {e}");
+                }
+            } else {
+                log::error!("no shortcut to execute");
+            }
+        } else if let Some(shell) = shell {
             std::thread::spawn(move || {
                 let mut command = Command::new("sh");
                 command.arg("-c").arg(&shell);
@@ -194,13 +260,13 @@ pub fn press_chord(handle: AppHandle, chord: &Chord) -> anyhow::Result<()> {
                     }
                 }
             });
-        } else {
-            if let Some(shortcut) = shortcut {
-                if let Err(e) = press_shortcut(shortcut.clone()) {
-                    log::error!("failed to press shortcut: {e}");
-                }
-            } else {
-                log::error!("no shortcut to execute");
+        } else if let Some(lua) = lua {
+            let Some(lua_runtime) = runtime.lua_runtime else {
+                log::error!("missing lua runtime");
+            };
+
+            if let Err(e) = lua_runtime.lua.load(lua).exec() {
+                log::error!("failed to execute lua: {e}");
             }
         }
     })?;

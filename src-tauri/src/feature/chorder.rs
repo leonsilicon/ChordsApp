@@ -8,6 +8,7 @@ use keycode::KeyMappingCode;
 use observable_property::ObservableProperty;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
+use crate::mode::AppMode::Chord;
 
 pub struct Chorder {
     pub state: ObservableProperty<Arc<ChorderState>>,
@@ -113,10 +114,11 @@ impl Chorder {
                 // A non-empty key_buffer means we should execute the chord.
                 log::debug!("Executing key_buffer {:?}", key_buffer);
 
-                let Some(chord) = loaded_app_chords.get_chord(
+                let chord_runtime = loaded_app_chords.get_chord_runtime(
                     &state.key_buffer,
                     context.frontmost_application_id.load().as_ref().clone(),
-                ) else {
+                );
+                let Some(chord) = chord_runtime.get_chord(key_buffer) else {
                     // If the chord is the buffer is invalid, reset it
                     log::error!(
                         "Invalid chord: {:?} for application: {:?}",
@@ -131,7 +133,7 @@ impl Chorder {
                     return Ok(());
                 };
 
-                press_chord(handle.clone(), &chord)?;
+                press_chord(handle.clone(), &chord_runtime, chord)?;
                 self.state.set(Arc::new(ChorderState {
                     pressed_chord: Some(chord.clone()),
                     key_buffer: vec![],

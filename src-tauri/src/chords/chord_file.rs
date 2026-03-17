@@ -77,14 +77,14 @@ impl AppChordsFile {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppChordsFileConfig {
     pub name: Option<String>,
     pub extends: Option<String>,
     pub lua: Option<AppChordsFileConfigLua>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppChordsFileConfigLua {
     pub init: Option<String>
 }

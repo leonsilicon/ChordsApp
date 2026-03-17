@@ -112,7 +112,7 @@ pub fn list_loaded_chords(loaded_app_chords: &LoadedAppChords) -> Vec<ActiveChor
     let mut chords = Vec::new();
     let mut seen = HashSet::new();
 
-    for chord in loaded_app_chords.global_chords.values() {
+    for chord in loaded_app_chords.global_runtime.chords.values() {
         let item = ActiveChordInfo {
             scope: "Global".to_string(),
             scope_kind: "global".to_string(),
@@ -129,8 +129,8 @@ pub fn list_loaded_chords(loaded_app_chords: &LoadedAppChords) -> Vec<ActiveChor
         }
     }
 
-    for (application_id, chord_map) in &loaded_app_chords.app_specific_chords {
-        for chord in chord_map.values() {
+    for (application_id, runtime) in &loaded_app_chords.app_runtime_map {
+        for chord in runtime.chords.values() {
             let item = ActiveChordInfo {
                 scope: application_id.clone(),
                 scope_kind: "app".to_string(),

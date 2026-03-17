@@ -75,7 +75,7 @@ impl ChordRuntime {
         if let Some(r) = &self.lua_runtime {
             lua_init_scripts.extend(r.lua_init_scripts.clone());
         }
-        
+
         self.lua_runtime = Some(Arc::new(ChordLuaRuntime::new(lua_init_scripts.clone())?));
 
         Ok(())
@@ -203,7 +203,10 @@ impl LoadedAppChords {
 
     // No application = global chord
     pub fn get_chord_runtime(&self, sequence: &[Key], application_id: Option<String>) -> &ChordRuntime {
-        // Prefer app chord, fall back to global
+        if sequence.first().is_some_and(|c| !c.is_digit() && !c.is_letter()) {
+            return &self.global_runtime;
+        }
+
         let chord_runtime = if let Some(app_id) = application_id {
             self.app_runtime_map
                 .get(&app_id).unwrap_or(&self.global_runtime)

@@ -172,7 +172,7 @@ In addition to running shortcuts and shell commands, chords can also run arbitra
 For example, this `vscode_helpers.lua` script allows us to programatically execute VSCode commands by their ID using the [Cursorless extension](https://marketplace.visualstudio.com/items?itemName=pokey.command-server):
 
 ```lua
--- vscode_helpers.lua
+-- lua/vscode_helpers.lua
 local M = {}
 
 local file = require("file")

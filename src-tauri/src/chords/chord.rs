@@ -252,75 +252,69 @@ impl LoadedAppChords {
                 let globals = lua.globals();
                 let package: mlua::Table = globals.get("package")?;
 
-                if let Some(root_dir) = chord_folder
-                    .root_dir
-                    .as_ref()
-                    .map(|p| p.to_string_lossy().to_string())
-                {
-                    // Updates the path used by Lua's require
-                    let mut new_paths = Vec::new();
-                    let mut new_cpaths = Vec::new();
-                    for lua_dir in &chord_folder.lua_dirs {
-                        let dir = lua_dir.to_string_lossy();
-                        new_paths.push(format!("{}/?.lua", dir));
-                        new_paths.push(format!("{}/?/init.lua", dir));
-                        new_cpaths.push(format!("{}/?.so", dir));
-                        new_cpaths.push(format!("{}/?/init.so", dir));
+                // Updates the path used by Lua's require
+                let mut new_paths = Vec::new();
+                let mut new_cpaths = Vec::new();
+                for lua_dir in &chord_folder.lua_dirs {
+                    let lua_dir_string = lua_dir.to_string_lossy();
+                    new_paths.push(format!("{}/?.lua", lua_dir_string));
+                    new_paths.push(format!("{}/?/init.lua", lua_dir_string));
+                    new_cpaths.push(format!("{}/?.so", lua_dir_string));
+                    new_cpaths.push(format!("{}/?/init.so", lua_dir_string));
 
-                        let lux_lock_filepath = lua_dir.join(".lux/5.4/lux.lock");
-                        if let Ok(lux_lock) = std::fs::read_to_string(lux_lock_filepath) {
-                            let lockfile: serde_json::Value = serde_json::from_str(&lux_lock)?;
+                    let lux_lock_filepath = lua_dir.join(".lux/5.4/lux.lock");
+                    if let Ok(lux_lock) = std::fs::read_to_string(lux_lock_filepath) {
+                        let lockfile: serde_json::Value = serde_json::from_str(&lux_lock)?;
 
-                            if let Some(rocks) = lockfile.get("rocks").and_then(|v| v.as_object()) {
-                                for (package_id, package) in rocks.iter() {
-                                    let name = package.get("name").and_then(|v| v.as_str());
-                                    let version = package.get("version").and_then(|v| v.as_str());
+                        if let Some(rocks) = lockfile.get("rocks").and_then(|v| v.as_object()) {
+                            for (package_id, package) in rocks.iter() {
+                                let name = package.get("name").and_then(|v| v.as_str());
+                                let version = package.get("version").and_then(|v| v.as_str());
 
-                                    let (Some(name), Some(version)) = (name, version) else {
-                                        log::warn!(
-                                            "Skipping package with missing name/version: {:?}",
-                                            package
-                                        );
-                                        continue;
-                                    };
+                                let (Some(name), Some(version)) = (name, version) else {
+                                    log::warn!(
+                                        "Skipping package with missing name/version: {:?}",
+                                        package
+                                    );
+                                    continue;
+                                };
 
-                                    let rock_dir = format!(
-                                        "{}/.lux/5.4/{}-{}@{}/src/?.lua",
-                                        root_dir, package_id, name, version
-                                    );
-                                    let rock_init = format!(
-                                        "{}/.lux/5.4/{}-{}@{}/src/?/init.lua",
-                                        root_dir, package_id, name, version
-                                    );
-                                    let rock_dir_so = format!(
-                                        "{}/.lux/5.4/{}-{}@{}/src/?.so",
-                                        root_dir, package_id, name, version
-                                    );
-                                    let rock_init_so = format!(
-                                        "{}/.lux/5.4/{}-{}@{}/src/?/init.so",
-                                        root_dir, package_id, name, version
-                                    );
-                                    new_paths.push(rock_dir);
-                                    new_paths.push(rock_init);
-                                    new_cpaths.push(rock_dir_so);
-                                    new_cpaths.push(rock_init_so);
-                                }
+                                let rock_dir = format!(
+                                    "{}/.lux/5.4/{}-{}@{}/src/?.lua",
+                                    lua_dir_string, package_id, name, version
+                                );
+                                let rock_init = format!(
+                                    "{}/.lux/5.4/{}-{}@{}/src/?/init.lua",
+                                    lua_dir_string, package_id, name, version
+                                );
+                                let rock_dir_so = format!(
+                                    "{}/.lux/5.4/{}-{}@{}/src/?.so",
+                                    lua_dir_string, package_id, name, version
+                                );
+                                let rock_init_so = format!(
+                                    "{}/.lux/5.4/{}-{}@{}/src/?/init.so",
+                                    lua_dir_string, package_id, name, version
+                                );
+                                new_paths.push(rock_dir);
+                                new_paths.push(rock_init);
+                                new_cpaths.push(rock_dir_so);
+                                new_cpaths.push(rock_init_so);
                             }
                         }
                     }
-
-                    // append existing path
-                    let path: String = package.get("path")?;
-                    new_paths.push(path);
-                    let new_path = new_paths.join(";");
-                    package.set("path", new_path)?;
-
-                    // append existing cpath
-                    let old: String = package.get("cpath")?;
-                    new_paths.push(old);
-                    let new_cpath = new_paths.join(";");
-                    package.set("cpath", new_cpath)?;
                 }
+
+                // append existing path
+                let path: String = package.get("path")?;
+                new_paths.push(path);
+                let new_path = new_paths.join(";");
+                package.set("path", new_path)?;
+
+                // append existing cpath
+                let old: String = package.get("cpath")?;
+                new_paths.push(old);
+                let new_cpath = new_paths.join(";");
+                package.set("cpath", new_cpath)?;
 
                 // Now that the require path has been updated, we can now execute the init scripts
                 // We couldn't do this in impl ChordFolder because we need to wait for merge

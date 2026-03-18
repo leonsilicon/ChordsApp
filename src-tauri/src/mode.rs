@@ -61,9 +61,12 @@ impl AppModeStateMachine {
             AppMode::None => self.handle_none_mode_event(event),
             AppMode::Chord => {
                 let consumed = self.handle_chord_mode_event(event);
-                log::debug!("is_shift_pressed: {}", self.is_shift_pressed.load(Ordering::SeqCst));
+                log::debug!(
+                    "is_shift_pressed: {}",
+                    self.is_shift_pressed.load(Ordering::SeqCst)
+                );
                 consumed
-            },
+            }
         };
         let new_mode = self.get_app_mode();
 
@@ -105,7 +108,7 @@ impl AppModeStateMachine {
         match event {
             KeyEvent::Release(Key(code)) => {
                 // Consume Shift events to avoid them leaking into synthetic shortcuts
-                if code == &KeyMappingCode::ShiftLeft  || code == &KeyMappingCode::ShiftRight {
+                if code == &KeyMappingCode::ShiftLeft || code == &KeyMappingCode::ShiftRight {
                     self.is_shift_pressed.store(false, Ordering::SeqCst);
                     return true;
                 }
@@ -116,7 +119,8 @@ impl AppModeStateMachine {
                 }
             }
             KeyEvent::Press(key) => {
-                if key == &Key(KeyMappingCode::ShiftLeft) || key == &Key(KeyMappingCode::ShiftRight) {
+                if key == &Key(KeyMappingCode::ShiftLeft) || key == &Key(KeyMappingCode::ShiftRight)
+                {
                     self.is_shift_pressed.store(true, Ordering::SeqCst);
                     return true;
                 }

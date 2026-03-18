@@ -43,13 +43,13 @@ pub fn register_key_event_input_grabber(handle: AppHandle) {
                     return Some(event);
                 };
                 (key, KeyEvent::Press(key))
-            },
+            }
             rdev::EventType::KeyRelease(key) => {
                 let Ok(key) = Key::try_from(key) else {
                     return Some(event);
                 };
                 (key, KeyEvent::Release(key))
-            },
+            }
             _ => return Some(event),
         };
 

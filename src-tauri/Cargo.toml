@@ -53,12 +53,9 @@ walkdir = "2.5.0"
 gix = {  version = "0.80.0", features = ["blocking-http-transport-reqwest-rust-tls"] }
 macos-accessibility-client = "0.0.2"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
-mlua = { version  = "0.11.6", features = ["lua54", "send", "error-send"] }
-objc2-core-graphics = "0.3.2"
+mlua = { version  = "0.11.6", features = ["lua54", "send", "error-send", "vendored"] }
 mac-keycode = "0.0.2"
-objc2-core-foundation = "0.3.2"
 fast_radix_trie = "1.1.0"
-bracoxide = "0.1.8"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.1"

@@ -101,7 +101,8 @@ impl Chorder {
                     };
 
                     let application_id = context.frontmost_application_id.load().as_ref().clone();
-                    let chord_runtime = loaded_app_chords.get_chord_runtime(&last_chord.keys, application_id);
+                    let chord_runtime =
+                        loaded_app_chords.get_chord_runtime(&last_chord.keys, application_id);
                     press_chord(handle.clone(), chord_runtime, &last_chord)?;
                     self.state.set(Arc::new(ChorderState {
                         pressed_chord: state.active_chord.clone(),
@@ -206,7 +207,8 @@ impl Chorder {
 
         let frontmost_application_id = context.frontmost_application_id.load().as_ref().clone();
         let loaded_app_chords = context.loaded_app_chords.read();
-        let chord_runtime = loaded_app_chords.get_chord_runtime(&sequence, frontmost_application_id);
+        let chord_runtime =
+            loaded_app_chords.get_chord_runtime(&sequence, frontmost_application_id);
         let Some(chord) = chord_runtime.get_chord(&sequence) else {
             // We don't change the state for an invalid sequence
             log::debug!("Invalid sequence {:?}", sequence);

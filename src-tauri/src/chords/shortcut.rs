@@ -1,7 +1,7 @@
 use crate::input::Key;
 use anyhow::Result;
-use std::str::FromStr;
 use keycode::KeyMappingCode;
+use std::str::FromStr;
 
 pub fn press_shortcut(shortcut: Shortcut) -> Result<()> {
     log::debug!("Pressing shortcut: {:?}", shortcut);
@@ -22,9 +22,12 @@ fn apply_actions(actions: Vec<ShortcutAction>) -> Result<()> {
         match action {
             ShortcutAction::Press(key, suppress_shift) => {
                 rdev::simulate(&rdev::EventType::KeyPress(key.try_into()?), suppress_shift)?;
-            },
+            }
             ShortcutAction::Release(key, suppress_shift) => {
-                rdev::simulate(&rdev::EventType::KeyRelease(key.try_into()?), suppress_shift)?;
+                rdev::simulate(
+                    &rdev::EventType::KeyRelease(key.try_into()?),
+                    suppress_shift,
+                )?;
             }
         }
     }
@@ -35,7 +38,12 @@ fn apply_actions(actions: Vec<ShortcutAction>) -> Result<()> {
 fn press_actions(shortcut: &Shortcut) -> Vec<ShortcutAction> {
     let mut actions = Vec::new();
     let has_shift = shortcut.chords.iter().any(|chord| {
-        chord.keys.iter().any(|key| matches!(key, Key(KeyMappingCode::ShiftLeft) | Key(KeyMappingCode::ShiftRight)))
+        chord.keys.iter().any(|key| {
+            matches!(
+                key,
+                Key(KeyMappingCode::ShiftLeft) | Key(KeyMappingCode::ShiftRight)
+            )
+        })
     });
     let suppress_shift = !has_shift;
     log::debug!("Has Shift: {}", has_shift);
@@ -57,7 +65,12 @@ fn press_actions(shortcut: &Shortcut) -> Vec<ShortcutAction> {
 
 fn release_actions(shortcut: &Shortcut) -> Vec<ShortcutAction> {
     let has_shift = shortcut.chords.iter().any(|chord| {
-        chord.keys.iter().any(|key| matches!(key, Key(KeyMappingCode::ShiftLeft) | Key(KeyMappingCode::ShiftRight)))
+        chord.keys.iter().any(|key| {
+            matches!(
+                key,
+                Key(KeyMappingCode::ShiftLeft) | Key(KeyMappingCode::ShiftRight)
+            )
+        })
     });
     let suppress_shift = !has_shift;
 

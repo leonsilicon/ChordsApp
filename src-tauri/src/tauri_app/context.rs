@@ -6,7 +6,7 @@ use crate::{
     input::KeyEventState,
     mode::{AppMode, AppModeStateMachine},
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use device_query::DeviceState;
 use keycode::KeyMappingCode::*;
@@ -14,8 +14,8 @@ use objc2_app_kit::NSWorkspace;
 use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,7 +65,9 @@ impl AppContext {
     }
 
     pub fn is_shift_pressed(&self) -> bool {
-        self.app_mode_state_machine.is_shift_pressed.load(Ordering::SeqCst)
+        self.app_mode_state_machine
+            .is_shift_pressed
+            .load(Ordering::SeqCst)
     }
 }
 
@@ -76,9 +78,7 @@ pub fn initialize_app_context(app: AppHandle) -> Result<()> {
             .ok_or(anyhow::anyhow!("chord indicator window not found"))?;
         Chorder::new(ChorderIndicatorPanel::from_window(window)?)
     };
-    let bundled_app_chords = LoadedAppChords::from_folder(
-        ChordFolder::load_bundled()?,
-    )?;
+    let bundled_app_chords = LoadedAppChords::from_folders(vec![ChordFolder::load_bundled()?])?;
 
     let context = AppContext::new(chorder, bundled_app_chords);
 
@@ -103,7 +103,10 @@ pub fn reload_loaded_app_chords(app: &AppHandle) -> Result<()> {
     context.chorder.ensure_inactive(app.clone())?;
 
     let loaded_chords = load_all_app_chords(app)?;
-    log::debug!("Loaded app chords: {:?}", loaded_chords.app_runtime_map.keys());
+    log::debug!(
+        "Loaded app chords: {:?}",
+        loaded_chords.app_runtime_map.keys()
+    );
     *context.loaded_app_chords.write() = loaded_chords;
 
     Ok(())

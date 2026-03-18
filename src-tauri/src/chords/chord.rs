@@ -408,6 +408,7 @@ impl LoadedAppChords {
             }
         }
 
+        log::debug!("Loaded global chords: {:?}", global_chords_to_runtime_key.keys());
         Ok(LoadedAppChords {
             global_chords_to_runtime_key,
             runtimes: app_runtime_map,
@@ -424,11 +425,11 @@ impl LoadedAppChords {
             .first()
             .is_some_and(|c| !c.is_digit() && !c.is_letter())
         {
-            let Some(app_id) = self.global_chords_to_runtime_key.get(sequence) else {
+            let Some(runtime_key) = self.global_chords_to_runtime_key.get(sequence) else {
                 return None;
             };
 
-            self.runtimes.get(app_id)
+            self.runtimes.get(runtime_key)
         } else {
             if let Some(app_id) = application_id {
                 self.runtimes.get(&app_id)

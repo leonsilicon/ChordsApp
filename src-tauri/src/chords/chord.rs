@@ -49,7 +49,7 @@ impl ChordRuntime {
         let raw_chords = Arc::new(Mutex::new(chord_file.chords.clone()));
         let config = chord_file.config.clone();
         // We intentionally keep in global chords because they execute in this runtime
-        let chords = chord_file.get_chords_shallow()?;
+        let chords = chord_file.get_chords_shallow();
 
         let runtime = Self {
             raw_chords,
@@ -231,7 +231,7 @@ impl LoadedAppChords {
                 };
 
                 // Loading global chords into `global_chords`
-                let chords = file.get_chords_shallow()?;
+                let chords = file.get_chords_shallow();
                 for (sequence, chord) in &chords {
                     if sequence
                         .first()

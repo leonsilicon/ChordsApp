@@ -25,7 +25,7 @@ impl AppChordsFile {
         })
     }
 
-    pub fn get_chords_shallow(&self) -> Result<HashMap<Vec<Key>, Chord>> {
+    pub fn get_chords_shallow(&self) -> HashMap<Vec<Key>, Chord> {
         let mut chords = HashMap::new();
 
         for (sequence, value) in &self.chords {
@@ -39,7 +39,10 @@ impl AppChordsFile {
                 continue;
             };
 
-            let keys = Key::parse_sequence(sequence)?;
+            let Ok(keys) = Key::parse_sequence(sequence) else {
+                log::warn!("Skipping invalid sequence for chord: {}", sequence);
+                continue;
+            };
 
             let Ok(shortcut) = entry
                 .shortcut
@@ -61,7 +64,7 @@ impl AppChordsFile {
             chords.insert(keys, chord);
         }
 
-        Ok(chords)
+        chords
     }
 }
 

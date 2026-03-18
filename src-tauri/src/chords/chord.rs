@@ -27,6 +27,7 @@ pub struct ChordRuntime {
     pub chords: HashMap<Vec<Key>, Chord>,
     // Needs to be an Arc so that the Lua runtime can access its latest value
     pub raw_chords: Arc<Mutex<HashMap<String, AppChordMapValue>>>,
+    pub config: Option<AppChordsFileConfig>,
 
     // Needs to be in this struct so it can access `chords`
     pub lua: Lua
@@ -38,6 +39,7 @@ impl ChordRuntime {
         Self {
             chords,
             raw_chords,
+            config: None,
             lua: unsafe {
                 Lua::unsafe_new_with(
                     StdLib::ALL,
@@ -50,6 +52,7 @@ impl ChordRuntime {
     // Doesn't resolve _config.extends
     pub fn from_file_shallow(chord_file: AppChordsFile) -> Result<Self> {
         let raw_chords = Arc::new(Mutex::new(chord_file.chords.clone()));
+        let config = chord_file.config.clone();
         let mut chords = chord_file.get_chords_shallow()?;
         // Filters out global chords
         chords.retain(|sequence, _| {
@@ -60,6 +63,7 @@ impl ChordRuntime {
 
         let runtime = Self {
             raw_chords,
+            config,
             chords,
             lua: unsafe {
                 Lua::unsafe_new_with(
@@ -107,19 +111,6 @@ impl ChordRuntime {
                 press_shortcut(shortcut.clone()).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?;
                 Ok(release_shortcut(shortcut).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
             })?)?;
-
-            // TODO: lua runtime should be none if no _config.lua
-            let lua_init_scripts = chord_file
-                .config
-                .as_ref()
-                .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
-                .and_then(|lua_config| lua_config.init.clone())
-                .into_iter()
-                .collect::<Vec<_>>();
-
-            for init_script in &lua_init_scripts {
-                lua.load(init_script).exec()?;
-            }
         }
 
         Ok(runtime)
@@ -247,7 +238,22 @@ impl LoadedAppChords {
             let preload: mlua::Table = package.get("preload")?;
             for (name, source) in &chord_folder.lua_files {
                 let chunk = lua.load(source).into_function()?;
-                preload.set(name.as_str(), chunk)?;
+                let module_name = name.strip_suffix(".lua").unwrap_or(name);
+                preload.set(module_name, chunk)?;
+            }
+
+            // Now that the lua modules have been loaded, we can now execute the init scripts
+            let lua_init_scripts = app_chord_runtime.config
+                .as_ref()
+                .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
+                .and_then(|lua_config| lua_config.init.clone())
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            for init_script in &lua_init_scripts {
+                if let Err(e) = lua.load(init_script).exec() {
+                    log::error!("failed to execute init script for {:?}: {e}, skipping", app_chord_runtime.config);
+                }
             }
 
             log::debug!("Loaded {} initial chords for application ID {}", app_chord_runtime.chords.len(), application_id);

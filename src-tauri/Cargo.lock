@@ -440,6 +440,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bracoxide"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daeb5b71668c934a1db0c7b07317a3564f2558c5e9155c70d7d6823c01f2ddcd"
+
+[[package]]
 name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -664,8 +670,10 @@ dependencies = [
  "arc-swap",
  "bijective-enum-map",
  "bitflags 2.11.0",
+ "bracoxide",
  "cc",
  "device_query",
+ "fast_radix_trie",
  "fix-path-env",
  "frontmost",
  "gix",
@@ -1343,6 +1351,15 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fast_radix_trie"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01fa57e046f12ed257c007d47bbd49ae1bb8ae22f718f1b823d0fd03d63425c0"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

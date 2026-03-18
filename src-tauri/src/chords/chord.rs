@@ -1,11 +1,12 @@
 use crate::chords::shortcut::{press_shortcut, release_shortcut, Shortcut};
-use crate::chords::{AppChordsFile, AppChordsFileConfig, ChordFolder, ChordLuaRuntime};
+use crate::chords::{AppChordMapValue, AppChordsFile, AppChordsFileConfig, ChordFolder, ChordLuaRuntime};
 use crate::input::Key;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use mlua::{Lua, LuaOptions, StdLib};
 use tauri::AppHandle;
 
 #[derive(Debug, Clone)]
@@ -24,19 +25,31 @@ pub struct LoadedAppChords {
 
 pub struct ChordRuntime {
     pub chords: HashMap<Vec<Key>, Chord>,
-    pub lua_runtime: Option<Arc<ChordLuaRuntime>>
+    // Needs to be an Arc so that the Lua runtime can access its latest value
+    pub raw_chords: Arc<Mutex<HashMap<String, AppChordMapValue>>>,
+
+    // Needs to be in this struct so it can access `chords`
+    pub lua: Lua
 }
 
 impl ChordRuntime {
-    pub fn from_chords_no_lua(chords: HashMap<Vec<Key>, Chord>) -> Self {
+    pub fn from_chords(chords: HashMap<Vec<Key>, Chord>) -> Self {
+        let raw_chords = Arc::new(Mutex::new(HashMap::new()));
         Self {
             chords,
-            lua_runtime: None,
+            raw_chords,
+            lua: unsafe {
+                Lua::unsafe_new_with(
+                    StdLib::ALL,
+                    LuaOptions::default()
+                )
+            }
         }
     }
 
     // Doesn't resolve _config.extends
     pub fn from_file_shallow(chord_file: AppChordsFile) -> Result<Self> {
+        let raw_chords = Arc::new(Mutex::new(chord_file.chords.clone()));
         let mut chords = chord_file.get_chords_shallow()?;
         // Filters out global chords
         chords.retain(|sequence, _| {
@@ -45,19 +58,74 @@ impl ChordRuntime {
                 .is_some_and(|c| c.is_digit() || c.is_letter())
         });
 
-        // TODO: lua runtime should be none if no _config.lua
-        let lua_init_scripts = chord_file
-            .config
-            .as_ref()
-            .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
-            .and_then(|lua_config| lua_config.init.clone())
-            .into_iter()
-            .collect::<Vec<_>>();
-        let lua_runtime = ChordLuaRuntime::new(lua_init_scripts)?;
+        let runtime = Self {
+            raw_chords,
+            chords,
+            lua: unsafe {
+                Lua::unsafe_new_with(
+                    StdLib::ALL,
+                    LuaOptions::default()
+                )
+            }
+        };
 
-        Ok(Self { chords, lua_runtime: Some(Arc::new(lua_runtime)) })
+        {
+            {
+                let lua = runtime.lua.clone();
+                let raw_chords = runtime.raw_chords.clone();
+                lua.globals().set("get_chords", lua.clone().create_function(move |_, ()| {
+                    let lua_chords = lua.create_table()?;
+                    let raw_chords = raw_chords.lock().unwrap();
+                    for (sequence, chord) in raw_chords.iter() {
+                        if let AppChordMapValue::Single(chord) = chord {
+                            let lua_chord = lua.create_table()?;
+                            lua_chord.set("name", chord.name.clone())?;
+                            lua_chord.set("shortcut", chord.shortcut.clone())?;
+                            lua_chord.set("shell", chord.shell.clone())?;
+                            lua_chord.set("lua", chord.lua.clone())?;
+                            lua_chords.set(sequence.clone(), lua_chord)?;
+                        }
+                    }
+
+                    Ok(lua_chords.clone())
+                })?)?;
+            }
+
+            let lua = runtime.lua.clone();
+            lua.globals().set("press", lua.create_function(|_, key: String| {
+                let shortcut = Shortcut::parse(&key).map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
+                Ok(press_shortcut(shortcut).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
+            })?)?;
+
+            lua.globals().set("release", lua.create_function(|_, key: String| {
+                let shortcut = Shortcut::parse(&key).map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
+                Ok(release_shortcut(shortcut).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
+            })?)?;
+
+            lua.globals().set("tap", lua.create_function(|_, key: String| {
+                let shortcut = Shortcut::parse(&key).map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
+                press_shortcut(shortcut.clone()).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?;
+                Ok(release_shortcut(shortcut).map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
+            })?)?;
+
+            // TODO: lua runtime should be none if no _config.lua
+            let lua_init_scripts = chord_file
+                .config
+                .as_ref()
+                .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
+                .and_then(|lua_config| lua_config.init.clone())
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            for init_script in &lua_init_scripts {
+                lua.load(init_script).exec()?;
+            }
+        }
+
+        Ok(runtime)
     }
 
+    // We intentionally don't extend Lua init scripts so `chords.toml` can be better audited
     pub fn extend_runtime(&mut self, base: &Self) -> Result<()> {
         for (sequence, chord) in &base.chords {
             self.chords
@@ -65,17 +133,13 @@ impl ChordRuntime {
                 .or_insert_with(|| chord.clone());
         }
 
-        let mut lua_init_scripts = base
-            .lua_runtime
-            .as_ref()
-            .map(|r| r.lua_init_scripts.clone())
-            .unwrap_or_default();
-
-        if let Some(r) = &self.lua_runtime {
-            lua_init_scripts.extend(r.lua_init_scripts.clone());
+        let mut raw_chords = self.raw_chords.lock().expect("poisoned lock");
+        let base_raw_chords = base.raw_chords.lock().expect("poisoned lock");
+        for (sequence, chord) in base_raw_chords.iter() {
+            raw_chords
+                .entry(sequence.clone())
+                .or_insert_with(|| chord.clone());
         }
-
-        self.lua_runtime = Some(Arc::new(ChordLuaRuntime::new(lua_init_scripts.clone())?));
 
         Ok(())
     }
@@ -195,7 +259,7 @@ impl LoadedAppChords {
         }
 
         Ok(LoadedAppChords {
-            global_runtime: ChordRuntime::from_chords_no_lua(global_chords),
+            global_runtime: ChordRuntime::from_chords(global_chords),
             app_runtime_map,
         })
     }
@@ -222,7 +286,7 @@ pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> 
     let shortcut = chord.shortcut.clone();
     let shell = chord.shell.clone();
     let lua = chord.lua.clone();
-    let lua_runtime = runtime.lua_runtime.clone();
+    let lua_runtime = runtime.lua.clone();
     handle.clone().run_on_main_thread(move || {
         // Prioritize shortcuts
         if let Some(shortcut) = shortcut {
@@ -268,14 +332,9 @@ pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> 
                     }
                 }
             });
-        } else if let Some(lua) = lua {
-            let Some(lua_runtime) = lua_runtime.as_ref() else {
-                log::error!("missing lua runtime");
-                return;
-            };
-
-            log::debug!("Executing lua: {}", lua);
-            if let Err(e) = lua_runtime.lua.load(lua).exec() {
+        } else if let Some(lua_code) = lua {
+            log::debug!("Executing lua: {}", lua_code);
+            if let Err(e) = lua_runtime.load(lua_code).exec() {
                 log::error!("failed to execute lua: {e}");
             }
         }

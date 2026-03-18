@@ -237,7 +237,7 @@ impl LoadedAppChords {
             let package: mlua::Table = globals.get("package")?;
             let preload: mlua::Table = package.get("preload")?;
             for (name, source) in &chord_folder.lua_files {
-                let chunk = lua.load(source).into_function()?;
+                let chunk = lua.load(source).set_name(&file_path).into_function()?;
                 let module_name = name.strip_suffix(".lua").unwrap_or(name);
                 preload.set(module_name, chunk)?;
             }
@@ -251,7 +251,20 @@ impl LoadedAppChords {
                 .collect::<Vec<_>>();
 
             for init_script in &lua_init_scripts {
-                if let Err(e) = lua.load(init_script).exec() {
+                let wrapped_script = format!(
+                    r#"
+                        local ok, err = xpcall(function()
+                            {}
+                        end, debug.traceback)
+
+                        if not ok then
+                            error(err)
+                        end
+                        "#,
+                    init_script
+                );
+
+                if let Err(e) = lua.load(wrapped_script).set_name(&file_path).exec() {
                     log::error!("failed to execute init script for {:?}: {e}, skipping", app_chord_runtime.config);
                 }
             }

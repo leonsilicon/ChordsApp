@@ -33,11 +33,6 @@ pub struct ChordRuntime {
     pub lua: Lua,
 }
 
-const CMD: u32 = 1 << 8;
-const SHIFT: u32 = 1 << 9;
-const OPTION: u32 = 1 << 11;
-const CTRL: u32 = 1 << 12;
-
 impl ChordRuntime {
     pub fn from_chords(chords: HashMap<Vec<Key>, Chord>) -> Self {
         let raw_chords = Arc::new(Mutex::new(HashMap::new()));
@@ -118,44 +113,6 @@ impl ChordRuntime {
                         .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?;
                     Ok(release_shortcut(shortcut)
                         .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
-                })?,
-            )?;
-
-            // TODO: this should be in Lua
-            lua.globals().set(
-                "carbon_shortcut_to_string",
-                lua.create_function(|_, (keycode, modifiers): (u16, u32)| {
-                    let Some(mac_key) = mac_keycode::Key::from_keycode(keycode) else {
-                        log::warn!("Invalid keycode: {keycode}");
-                        return Ok(None);
-                    };
-
-                    let Ok(key) = Key::try_from(mac_key) else {
-                        log::warn!("Invalid key: {:?}", mac_key);
-                        return Ok(None);
-                    };
-
-                    let Some(char) = key.to_char(false) else {
-                        log::warn!("Invalid char for key: {:?}", key);
-                        return Ok(None);
-                    };
-
-                    let mut mods: Vec<String> = Vec::new();
-                    if modifiers & CMD != 0 {
-                        mods.push("cmd".to_string());
-                    }
-                    if modifiers & SHIFT != 0 {
-                        mods.push("shift".to_string());
-                    }
-                    if modifiers & OPTION != 0 {
-                        mods.push("option".to_string());
-                    }
-                    if modifiers & CTRL != 0 {
-                        mods.push("ctrl".to_string());
-                    }
-
-                    mods.push(char.to_string());
-                    Ok(Some(mods.join("+")))
                 })?,
             )?;
         }

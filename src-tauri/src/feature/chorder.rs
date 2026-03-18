@@ -101,15 +101,27 @@ impl Chorder {
                     };
 
                     let application_id = context.frontmost_application_id.load().as_ref().clone();
-                    let chord_runtime = loaded_app_chords.get_chord_runtime(&last_chord.keys, application_id);
-                    press_chord(handle.clone(), chord_runtime, &last_chord)?;
-                    self.state.set(Arc::new(ChorderState {
-                        pressed_chord: state.active_chord.clone(),
-                        key_buffer: vec![],
-                        active_chord: state.active_chord.clone(),
-                    }))?;
+                    let chord_runtime =
+                        loaded_app_chords.get_chord_runtime(&last_chord.keys, application_id);
+                    if let Some(chord_runtime) = chord_runtime {
+                        press_chord(handle.clone(), chord_runtime, &last_chord)?;
+                        self.state.set(Arc::new(ChorderState {
+                            pressed_chord: state.active_chord.clone(),
+                            key_buffer: vec![],
+                            active_chord: state.active_chord.clone(),
+                        }))?;
 
-                    return Ok(());
+                        return Ok(());
+                    } else {
+                        // e.g. we ran it on a different app
+                        log::error!("Last chord no longer applies");
+                        self.state.set(Arc::new(ChorderState {
+                            key_buffer: vec![],
+                            pressed_chord: None,
+                            active_chord: None,
+                        }))?;
+                        return Ok(());
+                    }
                 }
 
                 // A non-empty key_buffer means we should execute the chord.
@@ -119,7 +131,7 @@ impl Chorder {
                     &state.key_buffer,
                     context.frontmost_application_id.load().as_ref().clone(),
                 );
-                let Some(chord) = chord_runtime.get_chord(&key_buffer) else {
+                let (Some(chord_runtime), Some(chord)) = (chord_runtime, chord_runtime.and_then(|r| r.get_chord(&key_buffer))) else {
                     // If the chord is the buffer is invalid, reset it
                     log::error!(
                         "Invalid chord: {:?} for application: {:?}",
@@ -206,8 +218,9 @@ impl Chorder {
 
         let frontmost_application_id = context.frontmost_application_id.load().as_ref().clone();
         let loaded_app_chords = context.loaded_app_chords.read();
-        let chord_runtime = loaded_app_chords.get_chord_runtime(&sequence, frontmost_application_id);
-        let Some(chord) = chord_runtime.get_chord(&sequence) else {
+        let chord_runtime =
+            loaded_app_chords.get_chord_runtime(&sequence, frontmost_application_id);
+        let (Some(chord_runtime), Some(chord)) = (chord_runtime, chord_runtime.and_then(|r| r.get_chord(&sequence))) else {
             // We don't change the state for an invalid sequence
             log::debug!("Invalid sequence {:?}", sequence);
             return Ok(());

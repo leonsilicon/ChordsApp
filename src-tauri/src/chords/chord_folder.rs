@@ -1,21 +1,26 @@
 use crate::chords::AppChordsFile;
 use anyhow::Result;
+use fast_radix_trie::StringRadixMap;
 use include_dir::{include_dir, Dir};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
 #[derive(Debug)]
 pub struct ChordFolder {
+    pub root_dir: Option<PathBuf>,
+
     // Map from file path to chord
-    pub chords_files: HashMap<String, AppChordsFile>,
-    pub lua_files: HashMap<String, String>,
+    pub chords_files: StringRadixMap<AppChordsFile>,
+    // Can contain multiple when merged
+    pub lua_dirs: Vec<PathBuf>,
 }
 
 static BUNDLED_MACOS_CHORDS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../data/chords/macos");
 
 impl ChordFolder {
     pub fn load_bundled() -> Result<Self> {
-        let mut chords_files = HashMap::new();
+        let mut chords_files = StringRadixMap::new();
         for file in BUNDLED_MACOS_CHORDS_DIR.find("**/chords.toml")? {
             let path = file.path().to_string_lossy().to_string();
             let content = file
@@ -26,12 +31,15 @@ impl ChordFolder {
             chords_files.insert(path, app_chords_file);
         }
 
-        Ok(Self { chords_files, lua_files: HashMap::new() })
+        Ok(Self {
+            root_dir: None,
+            chords_files,
+            lua_dirs: vec![],
+        })
     }
 
     pub fn load_from_git_repo(repo: &gix::Repository) -> Result<Self> {
-        let mut chords_files = HashMap::new();
-        let mut lua_files = HashMap::new();
+        let mut chords_files = StringRadixMap::new();
 
         let root = repo
             .workdir()
@@ -67,47 +75,26 @@ impl ChordFolder {
             log::debug!("No chords/macos folder found in {:?}", root);
         }
 
-        // ------------------------
-        // Load lua/
-        // ------------------------
+        let mut lua_dirs = Vec::new();
         let lua_dir = root.join("lua");
         if lua_dir.exists() {
-            for entry in WalkDir::new(&lua_dir) {
-                let entry = entry?;
+            lua_dirs.push(lua_dir.clone());
+        }
 
-                if entry.file_type().is_file() {
-                    let path = entry.path();
-
-                    // optional: only include .lua files
-                    if path.extension().and_then(|e| e.to_str()) == Some("lua") {
-                        match std::fs::read_to_string(path) {
-                            Ok(content) => {
-                                let relative_path = path
-                                    .strip_prefix(&lua_dir)?
-                                    .to_string_lossy()
-                                    .to_string();
-
-                                lua_files.insert(relative_path, content);
-                            }
-                            Err(err) => {
-                                log::warn!("Skipping lua file {:?}: {}", path, err);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            log::debug!("No lua folder found in {:?}", root);
+        let lua_src_dir = lua_dir.join("src");
+        if lua_src_dir.exists() {
+            lua_dirs.push(lua_src_dir);
         }
 
         Ok(Self {
+            root_dir: Some(root.to_path_buf()),
             chords_files,
-            lua_files,
+            lua_dirs,
         })
     }
 
     pub fn merge(&mut self, other: Self) {
         self.chords_files.extend(other.chords_files);
-        self.lua_files.extend(other.lua_files);
+        self.lua_dirs.extend(other.lua_dirs);
     }
 }

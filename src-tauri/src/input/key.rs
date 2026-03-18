@@ -516,32 +516,32 @@ impl FromStr for Key {
                 "volumedown" => AudioVolumeDown,
                 "volumemute" => AudioVolumeMute,
                 "volumeup" => AudioVolumeUp,
-                "a" => KeyA,
-                "b" => KeyB,
-                "c" => KeyC,
-                "d" => KeyD,
-                "e" => KeyE,
-                "f" => KeyF,
-                "g" => KeyG,
-                "h" => KeyH,
-                "i" => KeyI,
-                "j" => KeyJ,
-                "k" => KeyK,
-                "l" => KeyL,
-                "m" => KeyM,
-                "n" => KeyN,
-                "o" => KeyO,
-                "p" => KeyP,
-                "q" => KeyQ,
-                "r" => KeyR,
-                "s" => KeyS,
-                "t" => KeyT,
-                "u" => KeyU,
-                "v" => KeyV,
-                "w" => KeyW,
-                "x" => KeyX,
-                "y" => KeyY,
-                "z" => KeyZ,
+                "a" | "A" => KeyA,
+                "b" | "B" => KeyB,
+                "c" | "C" => KeyC,
+                "d" | "D" => KeyD,
+                "e" | "E" => KeyE,
+                "f" | "F" => KeyF,
+                "g" | "G" => KeyG,
+                "h" | "H" => KeyH,
+                "i" | "I" => KeyI,
+                "j" | "J" => KeyJ,
+                "k" | "K" => KeyK,
+                "l" | "L" => KeyL,
+                "m" | "M" => KeyM,
+                "n" | "N" => KeyN,
+                "o" | "O" => KeyO,
+                "p" | "P" => KeyP,
+                "q" | "Q" => KeyQ,
+                "r" | "R" => KeyR,
+                "s" | "S" => KeyS,
+                "t" | "T" => KeyT,
+                "u" | "U" => KeyU,
+                "v" | "V" => KeyV,
+                "w" | "W" => KeyW,
+                "x" | "X" => KeyX,
+                "y" | "Y" => KeyY,
+                "z" | "Z" => KeyZ,
                 "1" => Digit1,
                 "2" => Digit2,
                 "3" => Digit3,
@@ -571,11 +571,13 @@ impl FromStr for Key {
     }
 }
 
-impl From<Key> for mac_keycode::Key {
-    fn from(key: Key) -> Self {
+impl TryFrom<Key> for mac_keycode::Key {
+    type Error = anyhow::Error;
+
+    fn try_from(key: Key) -> Result<Self> {
         use mac_keycode::Key as K;
 
-        match key.0 {
+        let mac_key = match key.0 {
             KeyA => K::A,
             KeyS => K::S,
             KeyD => K::D,
@@ -689,10 +691,153 @@ impl From<Key> for mac_keycode::Key {
             ArrowRight => K::RightArrow,
             ArrowDown => K::DownArrow,
             ArrowUp => K::UpArrow,
-            _ => panic!("Unsupported mac_keycode::Key conversion: {:?}", key),
-        }
+            _ => return Err(anyhow::anyhow!("Unknown key: {:?}", key)),
+        };
+
+        Ok(mac_key)
     }
 }
+
+impl TryFrom<mac_keycode::Key> for Key {
+    type Error = anyhow::Error;
+
+    fn try_from(key: mac_keycode::Key) -> Result<Self> {
+        use mac_keycode::Key as K;
+
+        Ok(Key(match key {
+            K::A => KeyA,
+            K::S => KeyS,
+            K::D => KeyD,
+            K::F => KeyF,
+            K::H => KeyH,
+            K::G => KeyG,
+            K::Z => KeyZ,
+            K::X => KeyX,
+            K::C => KeyC,
+            K::V => KeyV,
+            K::ISOSection => IntlBackslash,
+            K::B => KeyB,
+            K::Q => KeyQ,
+            K::W => KeyW,
+            K::E => KeyE,
+            K::R => KeyR,
+            K::Y => KeyY,
+            K::T => KeyT,
+
+            K::Digit1 => Digit1,
+            K::Digit2 => Digit2,
+            K::Digit3 => Digit3,
+            K::Digit4 => Digit4,
+            K::Digit5 => Digit5,
+            K::Digit6 => Digit6,
+            K::Digit7 => Digit7,
+            K::Digit8 => Digit8,
+            K::Digit9 => Digit9,
+            K::Digit0 => Digit0,
+
+            K::Equal => Equal,
+            K::Minus => Minus,
+
+            K::LeftBracket => BracketLeft,
+            K::RightBracket => BracketRight,
+
+            K::O => KeyO,
+            K::U => KeyU,
+            K::I => KeyI,
+            K::P => KeyP,
+
+            K::Return => Enter,
+            K::L => KeyL,
+            K::J => KeyJ,
+            K::Quote => Quote,
+            K::K => KeyK,
+            K::Semicolon => Semicolon,
+            K::Backslash => Backslash,
+
+            K::Comma => Comma,
+            K::Slash => Slash,
+            K::N => KeyN,
+            K::M => KeyM,
+            K::Period => Period,
+
+            K::Tab => Tab,
+            K::Space => Space,
+            K::Grave => Backquote,
+            K::Delete => Backspace,
+            K::Escape => Escape,
+
+            K::Command => MetaLeft,
+            K::RightCommand => MetaRight,
+            K::Shift => ShiftLeft,
+            K::RightShift => ShiftRight,
+            K::Option => AltLeft,
+            K::RightOption => AltRight,
+            K::Control => ControlLeft,
+            K::RightControl => ControlRight,
+
+            K::Function => Fn,
+
+            K::F1 => F1,
+            K::F2 => F2,
+            K::F3 => F3,
+            K::F4 => F4,
+            K::F5 => F5,
+            K::F6 => F6,
+            K::F7 => F7,
+            K::F8 => F8,
+            K::F9 => F9,
+            K::F10 => F10,
+            K::F11 => F11,
+            K::F12 => F12,
+            K::F13 => F13,
+            K::F14 => F14,
+            K::F15 => F15,
+            K::F16 => F16,
+            K::F17 => F17,
+            K::F18 => F18,
+            K::F19 => F19,
+            K::F20 => F20,
+
+            K::Keypad0 => Numpad0,
+            K::Keypad1 => Numpad1,
+            K::Keypad2 => Numpad2,
+            K::Keypad3 => Numpad3,
+            K::Keypad4 => Numpad4,
+            K::Keypad5 => Numpad5,
+            K::Keypad6 => Numpad6,
+            K::Keypad7 => Numpad7,
+            K::Keypad8 => Numpad8,
+            K::Keypad9 => Numpad9,
+
+            K::KeypadDecimal => NumpadDecimal,
+            K::KeypadMultiply => NumpadMultiply,
+            K::KeypadPlus => NumpadAdd,
+            K::KeypadDivide => NumpadDivide,
+            K::KeypadEnter => NumpadEnter,
+            K::KeypadMinus => NumpadSubtract,
+            K::KeypadEquals => NumpadEqual,
+
+            K::VolumeUp => AudioVolumeUp,
+            K::VolumeDown => AudioVolumeDown,
+            K::Mute => AudioVolumeMute,
+
+            K::Help => Insert,
+            K::Home => Home,
+            K::PageUp => PageUp,
+            K::ForwardDelete => Delete,
+            K::End => End,
+            K::PageDown => PageDown,
+
+            K::LeftArrow => ArrowLeft,
+            K::RightArrow => ArrowRight,
+            K::DownArrow => ArrowDown,
+            K::UpArrow => ArrowUp,
+            K::CapsLock => CapsLock,
+            _ => return Err(anyhow::anyhow!("Unknown key: {:?}", key)),
+        }))
+    }
+}
+
 
 impl TryFrom<Key> for rdev::Key {
     type Error = anyhow::Error;

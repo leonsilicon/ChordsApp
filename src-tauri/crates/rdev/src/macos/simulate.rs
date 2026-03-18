@@ -30,14 +30,10 @@ unsafe fn convert_native_with_source(
                         code as i64,
                     );
 
-                    // Mark as synthetic
-                    // We have two types of synthetic:
-                    // 1. Synthetic which suppresses Shift
-                    // 2. Synthetic with passthrough Shift
                     CGEvent::set_integer_value_field(
                         Some(&event),
                         CGEventField::EventSourceUserData,
-                        if suppress_shift { 0xDEADDEAD } else { 0xDEADBEEF },
+                        0xDEADBEEF,
                     );
 
                     // Get current flags and update them
@@ -65,9 +61,15 @@ unsafe fn convert_native_with_source(
                     CGEvent::set_integer_value_field(
                         Some(&event),
                         CGEventField::EventSourceUserData,
-                        if suppress_shift { 0xDEADDEAD } else { 0xDEADBEEF },
+                        0xDEADBEEF,
                     );
-                    CGEvent::set_flags(Some(&event), *LAST_FLAGS.lock().unwrap());
+                    let last_flags = *LAST_FLAGS.lock().unwrap();
+                    let flags = if suppress_shift {
+                        last_flags & !CGEventFlags::MaskShift
+                    } else {
+                        last_flags
+                    };
+                    CGEvent::set_flags(Some(&event), flags);
                     Some(event)
                 }
             }

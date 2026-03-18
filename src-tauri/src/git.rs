@@ -181,24 +181,25 @@ pub fn load_repo_chords(app: &AppHandle, repo_input: &str) -> Result<LoadedAppCh
 
     let repo = gix::open(&repo_path).context(format!("failed to open repo {}", repo_ref.slug()))?;
     let chord_folder = ChordFolder::load_from_git_repo(&repo)?;
-    LoadedAppChords::from_folder(chord_folder)
+    LoadedAppChords::from_folders(vec![chord_folder])
 }
 
 pub fn load_all_app_chords(app: &AppHandle) -> Result<LoadedAppChords> {
-    let mut chord_folder = ChordFolder::load_bundled()?;
+    let mut chord_folders = Vec::new();
+
     for repo in discover_git_repos(app)? {
         match gix::open(&repo.local_path)
             .context(format!("failed to open repo {}", repo.slug))
             .and_then(|repo_handle| ChordFolder::load_from_git_repo(&repo_handle))
         {
             Ok(repo_folder) => {
-                chord_folder.merge(repo_folder);
-            },
+                chord_folders.push(repo_folder);
+            }
             Err(error) => log::warn!("Skipping repo {}: {error}", repo.slug),
         }
     }
 
-    LoadedAppChords::from_folder(chord_folder)
+    LoadedAppChords::from_folders(chord_folders)
 }
 
 fn clone_repo(repo_ref: &GitHubRepoRef, destination: &Path) -> Result<()> {

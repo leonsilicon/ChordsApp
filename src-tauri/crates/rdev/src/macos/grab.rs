@@ -29,15 +29,7 @@ unsafe extern "C-unwind" fn raw_callback(
                 if let Some(callback) = &mut *ptr {
                     match callback(event) {
                         None => CGEvent::set_type(Some(cg_event.as_ref()), CGEventType::Null),
-                        Some(event) => {
-                            // DEADDEAD is magic number to suppress Shift
-                            if event.source_user_data == 0xDEADDEAD {
-                                println!("Suppressing Shift");
-                                let flags = CGEvent::flags(Some(cg_event.as_ref()));
-                                let new_flags = flags & !CGEventFlags::MaskShift;
-                                CGEvent::set_flags(Some(cg_event.as_ref()), new_flags)
-                            }
-                        }
+                        Some(_) => {}
                     }
                 }
             }

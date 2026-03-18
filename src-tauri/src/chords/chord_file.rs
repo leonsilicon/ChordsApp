@@ -50,7 +50,7 @@ impl AppChordsFile {
                     .map(|s| Shortcut::parse(s))
                     .transpose()?,
                 shell: entry.shell.clone(),
-                lua: entry.lua.clone()
+                lua: entry.lua.clone(),
             };
 
             chords.insert(keys, chord);
@@ -69,7 +69,7 @@ pub struct AppChordsFileConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppChordsFileConfigLua {
-    pub init: Option<String>
+    pub init: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,7 +77,7 @@ pub struct AppChord {
     pub name: String,
     pub shortcut: Option<String>,
     pub shell: Option<String>,
-    pub lua: Option<String>
+    pub lua: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

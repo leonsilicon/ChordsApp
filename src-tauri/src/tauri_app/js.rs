@@ -34,7 +34,9 @@ impl Resolver for ModuleResolver {
             "child_process" => Ok("child_process".into()),
             "process" => Ok("process".into()),
             "path" => Ok("path".into()),
-            "console" => Ok("path".into()),
+            "console" => Ok("console".into()),
+            "buffer" => Ok("buffer".into()),
+            "crypto" => Ok("crypto".into())
             _ => Ok(name.into()),
             // _ => self.builtin_resolver.resolve(ctx, base, name),
         }
@@ -61,6 +63,8 @@ impl Loader for ModuleLoader {
             }
             "path" => Module::declare_def::<llrt_path::PathModule, _>(ctx.clone(), "path"),
             "console" => Module::declare_def::<llrt_console::ConsoleModule, _>(ctx.clone(), "console"),
+            "buffer" => Module::declare_def::<llrt_buffer::BufferModule, _>(ctx.clone(), "buffer"),
+            "crypto" => Module::declare_def::<llrt_crypto::CryptoModule, _>(ctx.clone(), "crypto"),
             _ => self.builtin_loader.load(ctx, name),
         }
     }
@@ -151,6 +155,7 @@ fn init_globals(ctx: Ctx<'_>) -> rquickjs::Result<()> {
     let globals = ctx.globals();
     llrt_process::init(&ctx)?;
     llrt_console::init(&ctx)?;
+    llrt_buffer::init(&ctx)?;
 
     {
         let press = Function::new(

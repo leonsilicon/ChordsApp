@@ -359,6 +359,8 @@ async fn call_js_default_export<'js>(
         }
     };
 
+    log::debug!("Return value: {:?}", result);
+
     if let Err(e) = await_promise_if_needed(ctx.clone(), result).await {
         log::error!(
             "Default function promise rejected: {}",
@@ -408,29 +410,31 @@ async fn get_default_export_function<'js>(
         }
     };
 
-    let default_function = if let Some(promise) = default.as_promise().cloned() {
-        let function = match promise.into_future::<Function>().await {
-            Ok(f) => f,
+    log::debug!("Default export: {:?}", default);
+    let resolved: Value<'js> = if let Some(promise) = default.as_promise().cloned() {
+        match promise.into_future::<Value<'js>>().await {
+            Ok(value) => value,
             Err(e) => {
                 log::error!(
-                    "Failed to resolve default export: {}",
+                    "Failed to resolve default export promise: {}",
                     format_js_error(ctx.clone(), e)
                 );
                 return None;
             }
-        };
-
-        function
+        }
     } else {
-        let Some(default_function) = default.as_function().cloned() else {
-            log::error!("Default export is not a function: {:?}", default);
-            return None;
-        };
-
-        default_function
+        default
     };
 
-    Some(default_function.clone())
+    let Some(function) = resolved.as_function().cloned() else {
+        log::error!(
+            "Default export did not resolve to a function: {:?}",
+            resolved
+        );
+        return None;
+    };
+
+    Some(function)
 }
 
 fn convert_js_args<'js>(ctx: &Ctx<'js>, args: Vec<String>) -> Option<Vec<Value<'js>>> {

@@ -2,12 +2,15 @@ use crate::chords::shortcut::{press_shortcut, release_shortcut, Shortcut};
 use crate::chords::{AppChordMapValue, AppChordsFile, AppChordsFileConfig, ChordFolder};
 use crate::input::Key;
 use anyhow::Result;
-use mlua::{Lua, LuaOptions, StdLib};
+use rquickjs::{Context, Ctx, Function, Module, Object};
+use rquickjs::runtime::{Runtime, UserDataError};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use gix::url::expand_path::with;
 use tauri::AppHandle;
+use crate::js::with_js;
 
 #[derive(Debug, Clone)]
 pub struct Chord {
@@ -15,7 +18,7 @@ pub struct Chord {
     pub name: String,
     pub shortcut: Option<Shortcut>,
     pub shell: Option<String>,
-    pub lua: Option<String>,
+    pub js: Option<String>,
 }
 
 pub struct LoadedAppChords {
@@ -28,20 +31,17 @@ pub struct ChordRuntime {
     // Needs to be an Arc so that the Lua runtime can access its latest value
     pub raw_chords: Arc<Mutex<HashMap<String, AppChordMapValue>>>,
     pub config: Option<AppChordsFileConfig>,
-
-    // Needs to be in this struct so it can access `chords`
-    pub lua: Lua,
 }
 
 impl ChordRuntime {
-    pub fn from_chords(chords: HashMap<Vec<Key>, Chord>) -> Self {
+    pub fn from_chords(chords: HashMap<Vec<Key>, Chord>) -> Result<Self> {
         let raw_chords = Arc::new(Mutex::new(HashMap::new()));
-        Self {
+        let js_runtime = Runtime::new()?;
+        Ok(Self {
             chords,
             raw_chords,
             config: None,
-            lua: unsafe { Lua::unsafe_new_with(StdLib::ALL, LuaOptions::default()) },
-        }
+        })
     }
 
     // Doesn't resolve _config.extends
@@ -51,71 +51,14 @@ impl ChordRuntime {
         // We intentionally keep in global chords because they execute in this runtime
         let chords = chord_file.get_chords_shallow();
 
+        let js_runtime = Runtime::new()?;
         let runtime = Self {
             raw_chords,
             config,
             chords,
-            lua: unsafe { Lua::unsafe_new_with(StdLib::ALL, LuaOptions::default()) },
         };
 
-        {
-            {
-                let lua = runtime.lua.clone();
-                let raw_chords = runtime.raw_chords.clone();
-                lua.globals().set(
-                    "get_chords",
-                    lua.clone().create_function(move |_, ()| {
-                        let lua_chords = lua.create_table()?;
-                        let raw_chords = raw_chords.lock().unwrap();
-                        for (sequence, chord) in raw_chords.iter() {
-                            if let AppChordMapValue::Single(chord) = chord {
-                                let lua_chord = lua.create_table()?;
-                                lua_chord.set("name", chord.name.clone())?;
-                                lua_chord.set("shortcut", chord.shortcut.clone())?;
-                                lua_chord.set("shell", chord.shell.clone())?;
-                                lua_chord.set("lua", chord.lua.clone())?;
-                                lua_chords.set(sequence.clone(), lua_chord)?;
-                            }
-                        }
-
-                        Ok(lua_chords.clone())
-                    })?,
-                )?;
-            }
-
-            let lua = runtime.lua.clone();
-            lua.globals().set(
-                "press",
-                lua.create_function(|_, key: String| {
-                    let shortcut = Shortcut::parse(&key)
-                        .map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
-                    Ok(press_shortcut(shortcut)
-                        .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
-                })?,
-            )?;
-
-            lua.globals().set(
-                "release",
-                lua.create_function(|_, key: String| {
-                    let shortcut = Shortcut::parse(&key)
-                        .map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
-                    Ok(release_shortcut(shortcut)
-                        .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
-                })?,
-            )?;
-
-            lua.globals().set(
-                "tap",
-                lua.create_function(|_, key: String| {
-                    let shortcut = Shortcut::parse(&key)
-                        .map_err(|_| mlua::Error::RuntimeError(format!("unknown key: {key}")))?;
-                    press_shortcut(shortcut.clone())
-                        .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?;
-                    Ok(release_shortcut(shortcut)
-                        .map_err(|e| mlua::Error::RuntimeError(format!("{e:?}")))?)
-                })?,
-            )?;
-        }
+        let raw_chords = runtime.raw_chords.clone();
 
         Ok(runtime)
     }
@@ -219,7 +162,7 @@ impl LoadedAppChords {
         let mut app_runtime_map = HashMap::new();
         let mut app_config_map = HashMap::new();
 
-        // TODO: Isolate runtimes across different folders
+
         for chord_folder in chord_folders {
             log::debug!("Loading folder from root {:?}", chord_folder.root_dir);
 
@@ -245,106 +188,15 @@ impl LoadedAppChords {
                 let config = file.config.clone();
                 let app_chord_runtime = ChordRuntime::from_file_shallow(file)?;
 
-                // Load the lua modules into the runtime
-                let lua = app_chord_runtime.lua.clone();
-                let globals = lua.globals();
-                let package: mlua::Table = globals.get("package")?;
-
-                // Updates the path used by Lua's require
-                let mut new_paths = Vec::new();
-                let mut new_cpaths = Vec::new();
-                for lua_dir in &chord_folder.lua_dirs {
-                    let lua_dir_string = lua_dir.to_string_lossy();
-                    new_paths.push(format!("{}/?.lua", lua_dir_string));
-                    new_paths.push(format!("{}/?/init.lua", lua_dir_string));
-                    new_cpaths.push(format!("{}/?.so", lua_dir_string));
-                    new_cpaths.push(format!("{}/?/init.so", lua_dir_string));
-
-                    let lux_lock_filepath = lua_dir.join(".lux/5.4/lux.lock");
-                    if let Ok(lux_lock) = std::fs::read_to_string(lux_lock_filepath) {
-                        let lockfile: serde_json::Value = serde_json::from_str(&lux_lock)?;
-
-                        if let Some(rocks) = lockfile.get("rocks").and_then(|v| v.as_object()) {
-                            for (package_id, package) in rocks.iter() {
-                                let name = package.get("name").and_then(|v| v.as_str());
-                                let version = package.get("version").and_then(|v| v.as_str());
-
-                                let (Some(name), Some(version)) = (name, version) else {
-                                    log::warn!(
-                                        "Skipping package with missing name/version: {:?}",
-                                        package
-                                    );
-                                    continue;
-                                };
-
-                                let rock_dir = format!(
-                                    "{}/.lux/5.4/{}-{}@{}/src/?.lua",
-                                    lua_dir_string, package_id, name, version
-                                );
-                                let rock_init = format!(
-                                    "{}/.lux/5.4/{}-{}@{}/src/?/init.lua",
-                                    lua_dir_string, package_id, name, version
-                                );
-                                let rock_dir_so = format!(
-                                    "{}/.lux/5.4/{}-{}@{}/lib/?.so",
-                                    lua_dir_string, package_id, name, version
-                                );
-                                let rock_init_so = format!(
-                                    "{}/.lux/5.4/{}-{}@{}/lib/?/init.so",
-                                    lua_dir_string, package_id, name, version
-                                );
-                                new_paths.push(rock_dir);
-                                new_paths.push(rock_init);
-                                new_cpaths.push(rock_dir_so);
-                                new_cpaths.push(rock_init_so);
-                            }
-                        }
+                // Load all JS files as modules
+                let js_files = &chord_folder.js_files;
+                with_js(|ctx| -> Result<()> {
+                    for (filepath, js) in js_files.iter() {
+                        Module::declare(ctx.clone(), filepath, js.as_str())?;
                     }
-                }
 
-                // append existing path
-                let old_path: String = package.get("path")?;
-                new_paths.push(old_path);
-                let new_path = new_paths.join(";");
-                package.set("path", new_path)?;
-
-                // append existing cpath
-                let old_cpath: String = package.get("cpath")?;
-                new_cpaths.push(old_cpath);
-                let new_cpath = new_cpaths.join(";");
-                package.set("cpath", new_cpath)?;
-
-                // Now that the require path has been updated, we can now execute the init scripts
-                // We couldn't do this in impl ChordFolder because we need to wait for merge
-                let lua_init_scripts = app_chord_runtime
-                    .config
-                    .as_ref()
-                    .and_then(|AppChordsFileConfig { lua, .. }| lua.as_ref())
-                    .and_then(|lua_config| lua_config.init.clone())
-                    .into_iter()
-                    .collect::<Vec<_>>();
-
-                for init_script in &lua_init_scripts {
-                    let wrapped_script = format!(
-                        r#"
-                        local ok, err = xpcall(function()
-                            {}
-                        end, debug.traceback)
-
-                        if not ok then
-                            error(err)
-                        end
-                        "#,
-                        init_script
-                    );
-
-                    if let Err(e) = lua.load(wrapped_script).set_name(&chord_file_path).exec() {
-                        log::error!(
-                            "failed to execute init script for {:?}: {e}, skipping",
-                            app_chord_runtime.config
-                        );
-                    }
-                }
+                    Ok(())
+                })?;
 
                 log::debug!(
                     "Loaded {} initial chords for application ID {}",
@@ -407,60 +259,62 @@ pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> 
     log::debug!("Pressing chord: {:?}", chord);
     let shortcut = chord.shortcut.clone();
     let shell = chord.shell.clone();
-    let lua = chord.lua.clone();
-    let lua_runtime = runtime.lua.clone();
-    handle.clone().run_on_main_thread(move || {
-        // Prioritize shortcuts
-        if let Some(shortcut) = shortcut {
+    let js = chord.js.clone();
+
+    // Prioritize shortcuts
+    if let Some(shortcut) = shortcut {
+        handle.clone().run_on_main_thread(move || {
             if let Err(e) = press_shortcut(shortcut.clone()) {
                 log::error!("failed to press shortcut: {e}");
             }
-        } else if let Some(shell) = shell {
-            std::thread::spawn(move || {
-                let mut command = Command::new("sh");
-                command.arg("-c").arg(&shell);
-                log::debug!("Running shell command: {:?}", command);
+        })?;
+    } else if let Some(shell) = shell {
+        std::thread::spawn(move || {
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(&shell);
+            log::debug!("Running shell command: {:?}", command);
 
-                match command.output() {
-                    Ok(output) => {
-                        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                        let exit_code = output.status.code();
+            match command.output() {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                    let exit_code = output.status.code();
 
-                        if output.status.success() {
-                            log::debug!(
-                                "shell command succeeded with exit code {:?}: {}",
-                                exit_code,
-                                shell
-                            );
-                        } else {
-                            log::error!(
-                                "shell command failed with exit code {:?}: {}",
-                                exit_code,
-                                shell
-                            );
-                        }
-
-                        if !stdout.is_empty() {
-                            log::debug!("shell stdout: {stdout}");
-                        }
-
-                        if !stderr.is_empty() {
-                            log::debug!("shell stderr: {stderr}");
-                        }
+                    if output.status.success() {
+                        log::debug!(
+                            "shell command succeeded with exit code {:?}: {}",
+                            exit_code,
+                            shell
+                        );
+                    } else {
+                        log::error!(
+                            "shell command failed with exit code {:?}: {}",
+                            exit_code,
+                            shell
+                        );
                     }
-                    Err(e) => {
-                        log::error!("failed to run shell command `{shell}`: {e}");
+
+                    if !stdout.is_empty() {
+                        log::debug!("shell stdout: {stdout}");
+                    }
+
+                    if !stderr.is_empty() {
+                        log::debug!("shell stderr: {stderr}");
                     }
                 }
-            });
-        } else if let Some(lua_code) = lua {
-            log::debug!("Executing lua: {}", lua_code);
-            if let Err(e) = lua_runtime.load(lua_code).exec() {
-                log::error!("failed to execute lua: {e}");
+                Err(e) => {
+                    log::error!("failed to run shell command `{shell}`: {e}");
+                }
             }
+        });
+    } else if let Some(js_code) = js {
+        log::debug!("Executing javascript: {}", js_code);
+        if let Err(e) = with_js(|ctx| {
+            ctx.eval::<(), _>(js_code)
+        }) {
+            log::error!("failed to execute javascript: {e}");
         }
-    })?;
+    }
 
     Ok(())
 }

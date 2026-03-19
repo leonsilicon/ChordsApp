@@ -17,6 +17,8 @@ pub fn release_shortcut(shortcut: Shortcut) -> Result<()> {
     Ok(())
 }
 
+// We use `rdev` for simulate instead of Enigo because rdev sends actual keypresses
+// instead of enigo's input injection (this works better in some apps, e.g. cmd+1 in IntelliJ)
 fn apply_actions(actions: Vec<ShortcutAction>) -> Result<()> {
     for action in actions {
         match action {

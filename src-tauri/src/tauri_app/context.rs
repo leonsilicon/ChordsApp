@@ -162,8 +162,8 @@ fn format_action(chord: &crate::chords::Chord) -> String {
         return format!("Shell: {shell}");
     }
 
-    if let Some(lua) = &chord.lua {
-        return format!("Lua: {lua}");
+    if let Some(js) = &chord.js {
+        return format!("JavaScript: {js}");
     }
 
     "No action".to_string()

@@ -1,4 +1,3 @@
-use frontmost::app::FrontmostApp;
 use parking_lot::deadlock;
 use std::sync::Arc;
 use std::thread;
@@ -34,7 +33,8 @@ struct Frontmost {
     handle: AppHandle,
 }
 
-impl FrontmostApp for Frontmost {
+#[cfg(target_os = "macos")]
+impl frontmost::app::FrontmostApp for Frontmost {
     fn set_frontmost(&mut self, new_value: &str) {
         self.frontmost = new_value.to_string();
         let context = self.handle.state::<AppContext>();

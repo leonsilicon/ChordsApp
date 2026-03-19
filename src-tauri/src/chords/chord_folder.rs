@@ -12,8 +12,7 @@ pub struct ChordFolder {
 
     // Map from file path to chord
     pub chords_files: StringRadixMap<AppChordsFile>,
-    // Can contain multiple when merged
-    pub lua_dirs: Vec<PathBuf>,
+    pub js_files: StringRadixMap<String>,
 }
 
 static BUNDLED_MACOS_CHORDS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../data/chords/macos");
@@ -34,67 +33,76 @@ impl ChordFolder {
         Ok(Self {
             root_dir: None,
             chords_files,
-            lua_dirs: vec![],
+            js_files: StringRadixMap::new(),
         })
     }
 
     pub fn load_from_git_repo(repo: &gix::Repository) -> Result<Self> {
+        let mut js_files = StringRadixMap::new();
         let mut chords_files = StringRadixMap::new();
 
         let root = repo
             .workdir()
             .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?;
 
-        // ------------------------
-        // Load chords/macos
-        // ------------------------
-        let chords_dir = root.join("chords").join("macos");
-        if chords_dir.exists() {
-            for entry in WalkDir::new(&chords_dir) {
+        if root.exists() {
+            for entry in WalkDir::new(&root) {
                 let entry = entry?;
-                if entry.file_name() == "chords.toml" {
-                    let content = std::fs::read_to_string(entry.path())?;
-                    match AppChordsFile::parse(&content) {
-                        Ok(parsed) => {
-                            let relative_path = entry
-                                .path()
-                                .strip_prefix(&chords_dir)?
-                                .to_string_lossy()
-                                .to_string();
+                let path = entry.path();
 
-                            chords_files.insert(relative_path, parsed);
+                if !path.is_file() {
+                    continue;
+                }
+
+                let relative_path = path.strip_prefix(&root)?.to_path_buf();
+
+                // ------------------------
+                // Handle chords/*
+                // ------------------------
+                if relative_path.starts_with("chords") {
+                    if entry.file_name() == "chords.toml" {
+                        let content = std::fs::read_to_string(path)?;
+
+                        match AppChordsFile::parse(&content) {
+                            Ok(parsed) => {
+                                chords_files.insert(
+                                    relative_path.to_string_lossy().to_string(),
+                                    parsed,
+                                );
+                            }
+                            Err(error) => {
+                                log::warn!("Skipping invalid {:?}: {}", path, error);
+                                continue;
+                            }
                         }
-                        Err(error) => {
-                            log::warn!("Skipping invalid {:?}: {}", entry.path(), error);
-                            continue;
-                        }
-                    };
+                    }
+                }
+
+                // ------------------------
+                // Handle *.js files
+                // ------------------------
+                if path.extension().and_then(|s| s.to_str()) == Some("js") {
+                    let content = std::fs::read_to_string(path)?;
+
+                    js_files.insert(
+                        relative_path.to_string_lossy().to_string(),
+                        content,
+                    );
                 }
             }
         } else {
-            log::debug!("No chords/macos folder found in {:?}", root);
-        }
-
-        let mut lua_dirs = Vec::new();
-        let lua_dir = root.join("lua");
-        if lua_dir.exists() {
-            lua_dirs.push(lua_dir.clone());
-        }
-
-        let lua_src_dir = lua_dir.join("src");
-        if lua_src_dir.exists() {
-            lua_dirs.push(lua_src_dir);
+            log::debug!("Root folder does not exist: {:?}", root);
         }
 
         Ok(Self {
             root_dir: Some(root.to_path_buf()),
             chords_files,
-            lua_dirs,
+            js_files,
         })
     }
 
     pub fn merge(&mut self, other: Self) {
         self.chords_files.extend(other.chords_files);
-        self.lua_dirs.extend(other.lua_dirs);
+        self.js_files.extend(other.js_files);
     }
 }

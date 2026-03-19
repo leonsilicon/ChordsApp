@@ -58,7 +58,7 @@ impl AppChordsFile {
                 name: entry.name.clone(),
                 shortcut,
                 shell: entry.shell.clone(),
-                lua: entry.lua.clone(),
+                js: entry.js.clone(),
             };
 
             chords.insert(keys, chord);
@@ -72,11 +72,11 @@ impl AppChordsFile {
 pub struct AppChordsFileConfig {
     pub name: Option<String>,
     pub extends: Option<String>,
-    pub lua: Option<AppChordsFileConfigLua>,
+    pub js: Option<AppChordsFileConfigJs>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AppChordsFileConfigLua {
+pub struct AppChordsFileConfigJs {
     pub init: Option<String>,
 }
 
@@ -85,7 +85,7 @@ pub struct AppChord {
     pub name: String,
     pub shortcut: Option<String>,
     pub shell: Option<String>,
-    pub lua: Option<String>,
+    pub js: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

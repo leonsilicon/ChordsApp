@@ -183,49 +183,23 @@ pub async fn load_chord_files_runtime_modules(
                         }
                     };
 
-                    let create_js_chords = || -> rquickjs::Result<Object<'_>> {
-                        let js_chords = Object::new(ctx.clone())?;
-                        for (sequence, raw_chord) in raw_chords.iter() {
-                            let entry = match raw_chord {
-                                AppChordMapValue::Single(entry) => Some(entry),
-                                AppChordMapValue::Multiple(entries) => entries.first(),
-                            };
-
-                            if let Some(entry) = entry {
-                                let js_chord = rquickjs::Object::new(ctx.clone())?;
-                                js_chord.set("name",  rquickjs::String::from_str(ctx.clone(), &entry.name))?;
-                                js_chord.set("shortcut",  rquickjs::String::from_str(ctx.clone(), &entry.shortcut.clone().unwrap_or_default()))?;
-                                js_chord.set("shell", rquickjs::String::from_str(ctx.clone(), &entry.shell.clone().unwrap_or_default()))?;
-
-                                if let Some(args) = entry.args.clone() {
-                                    let js_args = rquickjs::Array::new(ctx.clone())?;
-                                    for (i, arg) in args.clone().iter().enumerate() {
-                                        js_args.set(i, rquickjs::String::from_str(ctx.clone(), arg)?)?;
-                                    }
-                                    js_chord.set("args", js_args)?;
-                                }
-
-                                let js_key = rquickjs::String::from_str(ctx.clone(), sequence)?;
-                                js_chords.set(js_key, js_chord)?;
-                            }
-                        }
-
-                        Ok(js_chords)
-                    };
-
-                    let js_chords = match create_js_chords() {
-                        Ok(chords) => chords,
+                    let chords = match rquickjs_serde::to_value(ctx.clone(), raw_chords) {
+                        Ok(value) => value,
                         Err(e) => {
-                            log::error!(
-                                "Failed to create chords object for module {}: {}",
-                                path,
-                                format_js_error(ctx.clone(), e)
-                            );
-                            return Ok(());
+                            log::error!("Failed to serialize chords");
+                            return Ok(())
                         }
                     };
 
-                    if let Err(e) = module.meta().unwrap().set("chords", js_chords) {
+                    let chords_obj = match chords.into_object() {
+                        Some(value) => value,
+                        None => {
+                            log::error!("Failed to convert chords to object");
+                            return Ok(())
+                        }
+                    };
+
+                    if let Err(e) = module.meta().unwrap().set("chords", chords_obj) {
                         log::error!(
                             "Failed to set chords object for module {}: {}",
                             path,

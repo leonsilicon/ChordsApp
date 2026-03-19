@@ -48,6 +48,12 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 rquickjs = {  version = "0.11.0", features = ["loader"] }
 mac-keycode = "0.0.2"
 fast_radix_trie = "1.1.0"
+llrt_path = { git = "https://github.com/awslabs/llrt", package = "llrt_path" }
+llrt_fs = { git = "https://github.com/awslabs/llrt", package = "llrt_fs" }
+llrt_os = { git = "https://github.com/awslabs/llrt", package = "llrt_os" }
+llrt_util = { git = "https://github.com/awslabs/llrt", package = "llrt_util" }
+llrt_child_process = { git = "https://github.com/awslabs/llrt", package = "llrt_child_process" }
+llrt_process = { git = "https://github.com/awslabs/llrt", package = "llrt_process" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.2"

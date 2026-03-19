@@ -2,13 +2,13 @@ use crate::chords::shortcut::{press_shortcut, release_shortcut, Shortcut};
 use crate::chords::{AppChordMapValue, AppChordsFile, AppChordsFileConfig, ChordFolder};
 use crate::input::Key;
 use anyhow::Result;
-use rquickjs::{Context, Ctx, Function, Module, Object};
-use rquickjs::runtime::{Runtime, UserDataError};
+use rquickjs::{Ctx, Function, IntoJs, Module, Object};
+use rquickjs::runtime::{UserDataError};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use gix::url::expand_path::with;
+use rquickjs::function::Args;
 use tauri::AppHandle;
 use crate::js::{format_js_error, with_js};
 
@@ -18,7 +18,8 @@ pub struct Chord {
     pub name: String,
     pub shortcut: Option<Shortcut>,
     pub shell: Option<String>,
-    pub js: Option<String>,
+    // TODO: support non-string arguments
+    pub args: Option<Vec<String>>,
 }
 
 pub struct LoadedAppChords {
@@ -26,7 +27,11 @@ pub struct LoadedAppChords {
     pub runtimes: HashMap<String, ChordRuntime>,
 }
 
+// Each chord runtime is associated with a JS module which lives in-memory (similar to require.cache)
 pub struct ChordRuntime {
+    // Used to as a unique module key
+    pub path: String,
+
     pub chords: HashMap<Vec<Key>, Chord>,
     // Needs to be an Arc so that the Lua runtime can access its latest value
     pub raw_chords: Arc<Mutex<HashMap<String, AppChordMapValue>>>,
@@ -34,9 +39,10 @@ pub struct ChordRuntime {
 }
 
 impl ChordRuntime {
-    pub fn from_chords(chords: HashMap<Vec<Key>, Chord>) -> Result<Self> {
+    pub fn from_chords(path: String, chords: HashMap<Vec<Key>, Chord>) -> Result<Self> {
         let raw_chords = Arc::new(Mutex::new(HashMap::new()));
         Ok(Self {
+            path,
             chords,
             raw_chords,
             config: None,
@@ -44,24 +50,40 @@ impl ChordRuntime {
     }
 
     // Doesn't resolve _config.extends
-    pub fn from_file_shallow(chord_file: AppChordsFile) -> Result<Self> {
+    pub fn from_file_shallow(path: String, chord_file: AppChordsFile) -> Result<Self> {
         let raw_chords = Arc::new(Mutex::new(chord_file.chords.clone()));
         let config = chord_file.config.clone();
+
         // We intentionally keep in global chords because they execute in this runtime
         let chords = chord_file.get_chords_shallow();
 
-        let runtime = Self {
+        if let Some(js) = config.as_ref().and_then(|c| c.js.as_ref()) {
+            if let Some(content) = js.module.as_ref() {
+                with_js(|ctx| {
+                    let module = match Module::declare(ctx.clone(), path.clone(), content.as_bytes()) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            log::error!("Failed to declare module: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    if let Err(e) = module.eval() {
+                        log::error!("Failed to load module: {:?}", e);
+                        return;
+                    }
+                });
+            }
+        }
+
+        Ok(Self {
+            path,
             raw_chords,
             config,
             chords,
-        };
-
-        let raw_chords = runtime.raw_chords.clone();
-
-        Ok(runtime)
+        })
     }
 
-    // We intentionally don't extend Lua init scripts so `chords.toml` can be better audited
     pub fn extend_runtime(&mut self, base: &Self) -> Result<()> {
         for (sequence, chord) in &base.chords {
             self.chords
@@ -187,7 +209,7 @@ impl LoadedAppChords {
                 }
 
                 let config = file.config.clone();
-                let app_chord_runtime = ChordRuntime::from_file_shallow(file)?;
+                let app_chord_runtime = ChordRuntime::from_file_shallow(chord_file_path, file)?;
 
                 // Load all JS files as modules
                 let js_files = &chord_folder.js_files;
@@ -258,9 +280,11 @@ impl LoadedAppChords {
 
 pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> Result<()> {
     log::debug!("Pressing chord: {:?}", chord);
+    let path = runtime.path.clone();
     let shortcut = chord.shortcut.clone();
     let shell = chord.shell.clone();
-    let js = chord.js.clone();
+    let js_args = chord.args.clone();
+    let config_js = runtime.config.as_ref().and_then(|c| c.js.clone());
 
     // Prioritize shortcuts
     if let Some(shortcut) = shortcut {
@@ -308,13 +332,61 @@ pub fn press_chord(handle: AppHandle, runtime: &ChordRuntime, chord: &Chord) -> 
                 }
             }
         });
-    } else if let Some(js_code) = js {
-        log::debug!("Executing javascript: {}", js_code);
-        if let Err(e) = with_js(|ctx| {
-            ctx.eval::<(), _>(js_code)
-        }) {
-            log::error!("failed to execute javascript: {e}");
-        }
+    } else if let Some(args) = js_args {
+        // This calls the default export with the js_args
+        with_js(|ctx| {
+            let module = match Module::import(ctx, path) {
+                Ok(module) => module,
+                Err(e) => {
+                    log::error!("Failed to import JS module: {}", format_js_error(ctx.clone(), e));
+                    return;
+                }
+            };
+
+            let default: rquickjs::Value = match module.get("default") {
+                Ok(default) => default,
+                Err(e) => {
+                    log::error!("Failed to get default export: {}", format_js_error(ctx.clone(), e));
+                    return;
+                }
+            };
+
+            let Some(default_function) = default.as_function() else {
+                log::error!("Default export is not a function");
+                return;
+            };
+
+            let js_args: Vec<rquickjs::Value> = match args
+                .into_iter()
+                .map(|arg| arg.into_js(&ctx))
+                .collect::<rquickjs::Result<_>>() {
+                    Ok(args) => args,
+                    Err(e) => {
+                        log::error!("Failed to convert arguments: {}", format_js_error(ctx.clone(), e));
+                        return;
+                    }
+                };
+
+
+            let mut args_builder = Args::new(ctx.clone(), js_args.len());
+            log::debug!("Calling default function with arguments: {:?}", js_args);
+            for value in js_args {
+                if let Err(e) = args_builder.push_arg(value) {
+                    log::error!("Failed to push argument: {}", format_js_error(ctx.clone(), e));
+                    return;
+                }
+            }
+
+            match default_function.call_arg::<()>(args_builder) {
+                Ok(_) => {
+                    // TODO: check if value is false
+                }
+                Err(e) => {
+                    log::error!("Failed to call default function: {}", format_js_error(ctx.clone(), e));
+                    return;
+                }
+            }
+        });
     }
 
     Ok(())

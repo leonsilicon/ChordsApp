@@ -58,7 +58,7 @@ impl AppChordsFile {
                 name: entry.name.clone(),
                 shortcut,
                 shell: entry.shell.clone(),
-                js: entry.js.clone(),
+                args: entry.args.clone(),
             };
 
             chords.insert(keys, chord);
@@ -77,7 +77,7 @@ pub struct AppChordsFileConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppChordsFileConfigJs {
-    pub init: Option<String>,
+    pub module: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -85,7 +85,7 @@ pub struct AppChord {
     pub name: String,
     pub shortcut: Option<String>,
     pub shell: Option<String>,
-    pub js: Option<String>,
+    pub args: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

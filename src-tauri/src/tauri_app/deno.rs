@@ -11,7 +11,6 @@ use deno_runtime::{
 };
 use deno_runtime::deno_core::{FsModuleLoader};
 use sys_traits::impls::RealSys;
-use crate::tauri_app::deno_resolver::TypescriptModuleLoader;
 
 // Extension to provide SnapshotOptions
 deno_runtime::deno_core::extension!(
@@ -30,10 +29,9 @@ pub async fn create_main_worker() -> Result<MainWorker, AnyError> {
     let permission_desc_parser = Arc::new(RuntimePermissionDescriptorParser::new(RealSys));
     let permissions = PermissionsContainer::allow_all(permission_desc_parser);
 
-    let module_loader = Rc::new(TypescriptModuleLoader::new());
     // Set up worker service options with our npm-capable module loader
     let services = WorkerServiceOptions::<DenoInNpmPackageChecker, NpmResolver<RealSys>, RealSys> {
-        module_loader,
+        module_loader: Rc::new(FsModuleLoader),
         permissions,
         blob_store: Default::default(),
         broadcast_channel: Default::default(),
@@ -54,11 +52,6 @@ pub async fn create_main_worker() -> Result<MainWorker, AnyError> {
     let snapshot_options = SnapshotOptions::default();
     let options = WorkerOptions {
         extensions: vec![snapshot_options_extension::init(snapshot_options)],
-        ..Default::default()
-    };
-
-    let options = WorkerOptions {
-        extensions: vec![],
         ..Default::default()
     };
 

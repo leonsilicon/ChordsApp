@@ -2889,6 +2889,7 @@ dependencies = [
  "async-trait",
  "boxed_error",
  "color-print",
+ "deno_ast",
  "deno_bundle_runtime",
  "deno_cache",
  "deno_core",

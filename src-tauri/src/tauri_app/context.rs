@@ -148,7 +148,7 @@ pub async fn load_chord_files_runtime_modules(
     handle: AppHandle,
     loaded_app_chords: &LoadedAppChords,
 ) {
-    for (id, runtime) in loaded_app_chords.runtimes.iter() {
+    for (bundle_id, runtime) in loaded_app_chords.runtimes.iter() {
         let handle = handle.clone();
 
         let Some(js) = runtime.config.as_ref().and_then(|c| c.js.as_ref()) else {
@@ -161,6 +161,7 @@ pub async fn load_chord_files_runtime_modules(
 
         let path = runtime.path.clone();
         let raw_chords = runtime.raw_chords.lock().unwrap().clone();
+        let bundle_id = bundle_id.clone();
 
         tauri::async_runtime::spawn(async move {
             let path_ = path.clone();
@@ -194,9 +195,26 @@ pub async fn load_chord_files_runtime_modules(
                         }
                     };
 
-                    if let Err(e) = module.meta().unwrap().set("chords", chords_obj) {
+                    let meta = match module.meta() {
+                        Ok(meta) => meta,
+                        Err(e) => {
+                            log::error!("Failed to get import.meta for module {}", path);
+                            return Ok(())
+                        }
+                    };
+
+                    if let Err(e) = meta.set("chords", chords_obj) {
                         log::error!(
-                            "Failed to set chords object for module {}: {}",
+                            "Failed to set `import.meta.chords` for module {}: {}",
+                            path,
+                            format_js_error(ctx.clone(), e)
+                        );
+                        return Ok(());
+                    }
+
+                    if let Err(e) = meta.set("bundleId", bundle_id) {
+                        log::error!(
+                            "Failed to set `import.meta.bundleId` for module {}: {}",
                             path,
                             format_js_error(ctx.clone(), e)
                         );

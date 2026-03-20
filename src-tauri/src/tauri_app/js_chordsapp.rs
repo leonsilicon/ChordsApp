@@ -10,6 +10,8 @@ impl ModuleDef for ChordsappModule {
         declare.declare("press")?;
         declare.declare("release")?;
         declare.declare("tap")?;
+        declare.declare("getGlobalHotkey")?;
+        declare.declare("registerGlobalHotkey")?;
         Ok(())
     }
 

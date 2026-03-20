@@ -1,4 +1,3 @@
-use crate::chords::{press_shortcut, release_shortcut, Shortcut};
 use rquickjs::{loader::{BuiltinLoader, BuiltinResolver, Loader, Resolver}, module::Declared, AsyncContext, AsyncRuntime, Ctx, Error, Function, JsLifetime, Module, Object, Value};
 use std::{cell::RefCell, future::Future, pin::Pin};
 use rquickjs::class::{Trace, Tracer};
@@ -6,6 +5,8 @@ use tauri::{
     async_runtime::{block_on, channel},
     AppHandle,
 };
+use deno_runtime::worker::{MainWorker, WorkerServiceOptions};
+use crate::deno::create_main_worker;
 
 struct JsEngine {
     // Keep the runtime alive for as long as the context exists.
@@ -15,6 +16,7 @@ struct JsEngine {
 
 thread_local! {
     static JS_ENGINE: RefCell<Option<JsEngine>> = RefCell::new(None);
+    static JS_WORKER: RefCell<Option<MainWorker>> = RefCell::new(None);
 }
 
 pub struct AppUserData {
@@ -110,7 +112,14 @@ async fn ensure_engine(handle: AppHandle) -> Result<AsyncContext, String> {
 
     let out = ctx.clone();
 
-    JS_ENGINE.with(|cell| {
+    let main_worker = create_main_worker().await
+        .map_err(|err| err.to_string())?;
+
+    JS_WORKER.with(move |cell| {
+        *cell.borrow_mut() = Some(main_worker);
+    });
+
+                   JS_ENGINE.with(|cell| {
         *cell.borrow_mut() = Some(JsEngine { _rt: rt, ctx });
     });
 

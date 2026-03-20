@@ -29,7 +29,7 @@ tauri-plugin-macos-permissions = "2.3.0"
 tauri-plugin-single-instance = "2.4.0"
 tauri-plugin-log = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
-log = "0.4.29"
+log = "*"
 rdev = { version = "0.6", features = ["unstable_grab"] }
 observable-property = "0.4.2"
 toml = "1.0.6"
@@ -61,6 +61,11 @@ llrt_buffer = { git = "https://github.com/awslabs/llrt", package = "llrt_buffer"
 rquickjs-serde = "0.5.0"
 tauri-plugin-store = "2"
 jsonc-parser = "0.31.0"
+deno_runtime = "0.248.0"
+deno_resolver = "0.71.0"
+sys_traits = "*"
+deno_ast = "0.53.1"
+
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.2"

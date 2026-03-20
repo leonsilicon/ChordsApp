@@ -51,6 +51,7 @@ struct ModuleResolver {
 
 impl Resolver for ModuleResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+      let name = name.trim_start_matches("node:").trim_end_matches("/");
       if BUILTIN_MODULES.contains(&name.to_string()) {
         return Ok(name.into());
       }
@@ -85,6 +86,7 @@ impl ModuleDef for ModuleModule {
 }
 
 fn get_module<'js>(ctx: &Ctx<'js>, name: &str) -> rquickjs::Result<Option<Module<'js, Declared>>> {
+    println!("name: {}", name);
     let name = name.trim_start_matches("node:").trim_end_matches("/");
     let module = match name {
         "fs" => Module::declare_def::<llrt_fs::FsModule, _>(ctx.clone(), "fs"),

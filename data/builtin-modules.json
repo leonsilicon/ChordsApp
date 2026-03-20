@@ -6,5 +6,6 @@
   "process",
   "path",
   "console",
-  "buffer"
+  "buffer",
+  "module"
 ]

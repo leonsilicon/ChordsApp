@@ -5,7 +5,5 @@ mod js_chordsapp;
 pub mod settings;
 pub mod tray;
 pub mod store;
-pub mod deno;
-mod deno_resolver;
 
 pub use context::*;

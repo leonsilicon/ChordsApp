@@ -54,9 +54,7 @@ struct ModuleResolver {
 
 impl ModuleResolver {
     pub fn new(llrt_resolver: llrt_modules::module::resolver::ModuleResolver) -> Self {
-        Self {
-            llrt_resolver: llrt_modules::module::resolver::ModuleResolver::default(),
-        }
+        Self { llrt_resolver }
     }
 }
 
@@ -109,20 +107,33 @@ async fn ensure_engine(handle: AppHandle) -> anyhow::Result<AsyncContext> {
     }
 
     let rt = AsyncRuntime::new()?;
-    let module_builder = llrt_modules::module_builder::ModuleBuilder::default();
+    let module_builder = llrt_modules::module_builder::ModuleBuilder::default()
+        .with_global(llrt_core::modules::embedded::init)
+        .with_global(llrt_core::builtins_inspect::init);
     let (llrt_module_resolver, llrt_module_loader, global_attachment) = module_builder.build();
+    let module_resolver = ModuleResolver::new(llrt_module_resolver);
+    let resolver = (
+        module_resolver,
+        llrt_core::embedded::resolver::EmbeddedResolver,
+        llrt_core::package::resolver::PackageResolver,
+    );
+    let module_loader = ModuleLoader::new(llrt_module_loader);
+    let loader = (
+        module_loader,
+        llrt_core::embedded::loader::EmbeddedLoader,
+        llrt_core::package::loader::PackageLoader,
+    );
 
-    rt.set_loader(
-        ModuleResolver::new(llrt_module_resolver),
-        ModuleLoader::new(llrt_module_loader),
-    )
-    .await;
+    rt.set_loader(resolver, loader).await;
 
     let context = AsyncContext::full(&rt).await?;
     async_with!(context => |ctx| {
-        global_attachment.attach(&ctx);
-        ctx.store_userdata(AppUserData { handle });
-    });
+        global_attachment.attach(&ctx)?;
+        ctx.store_userdata(AppUserData { handle })?;
+
+        Ok::<_, Error>(())
+    })
+    .await?;
 
     // Deno makes the app super slow
     // JS_WORKER.with(move |cell| {

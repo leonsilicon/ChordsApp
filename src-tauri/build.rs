@@ -9,4 +9,5 @@ fn main() {
         .compile("hid_caps");
 
     tauri_build::build()
+    patch_crate::run().expect("failed to patch crate")
 }

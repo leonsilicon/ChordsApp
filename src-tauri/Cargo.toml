@@ -17,6 +17,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 cc = "1.0"
+# Latest version (0.1.13) is broken because it has a bad dependency on gix-url
+patch-crate = "0.1.9"
 
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
@@ -30,7 +32,7 @@ tauri-plugin-single-instance = "2.4.0"
 tauri-plugin-log = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
 log = "*"
-rdev = { version = "0.6", features = ["unstable_grab"] }
+rdev = { version = "*", features = ["unstable_grab"] }
 observable-property = "0.4.2"
 toml = "1.0.6"
 anyhow = "1.0"
@@ -48,18 +50,8 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 rquickjs = {  version = "0.11.0", features = ["full-async"] }
 mac-keycode = "0.0.2"
 fast_radix_trie = "1.1.0"
-llrt_modules = { git = "https://github.com/awslabs/llrt", package = "llrt_modules", features = [
-    "path",
-    "fs",
-    "os",
-    "util",
-    "child-process",
-    "process",
-    "console",
-    "buffer",
-    # Currently broken by a missing trait impl
-    # "crypto",
-] }
+llrt_modules = { git = "https://github.com/awslabs/llrt", package = "llrt_modules" }
+llrt_core = { git = "https://github.com/awslabs/llrt", package = "llrt_core", features = ['no-sdk', 'uncompressed'] }
 rquickjs-serde = "0.5.0"
 tauri-plugin-store = "2"
 jsonc-parser = "0.31.0"
@@ -72,6 +64,8 @@ include_json = "*"
 #sys_traits = "*"
 #deno_ast = "0.53.1"
 
+[package.metadata.patch]
+crates = ["llrt_core"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.2"
@@ -86,3 +80,7 @@ tauri-plugin-autostart = "2.5.1"
 [patch.crates-io]
 rdev = { path = "./crates/rdev" }
 frontmost = { path = "./crates/frontmost" }
+
+[patch."https://github.com/awslabs/llrt"]
+llrt_core = { path = "./target/patch/llrt_core" }
+

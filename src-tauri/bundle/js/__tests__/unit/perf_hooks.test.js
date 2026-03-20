@@ -1,0 +1,1 @@
+import e from"node:perf_hooks";import o from"perf_hooks";it("node:perf_hooks should be the same as perf_hooks",()=>{expect(e).toStrictEqual(o)});var{performance:r}=e;it("performance should be the same as globalThis.performance",()=>{expect(r).toStrictEqual(globalThis.performance)});

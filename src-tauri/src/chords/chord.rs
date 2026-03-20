@@ -397,7 +397,7 @@ async fn call_js_default_export<'js>(
     module_path: String,
     args: Vec<String>,
     num_times: usize,
-) -> rquickjs::Result<()> {
+) -> anyhow::Result<()> {
     for _ in 0..num_times {
         let Some(namespace) = import_js_namespace(ctx.clone(), &module_path).await else {
             return Ok(());

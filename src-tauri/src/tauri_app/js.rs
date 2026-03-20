@@ -1,22 +1,25 @@
-use rquickjs::{loader::{BuiltinLoader, BuiltinResolver, Loader, Resolver}, module::Declared, AsyncContext, AsyncRuntime, Ctx, Error, Function, JsLifetime, Module, Object, Value};
-use std::{cell::RefCell, future::Future, pin::Pin};
+use crate::tauri_app::js_chordsapp::ChordsappModule;
+use include_json::include_json;
+use rquickjs::async_with;
 use rquickjs::class::{Trace, Tracer};
+use rquickjs::{
+    loader::{Loader, Resolver},
+    module::Declared,
+    AsyncContext, AsyncRuntime, Ctx, Error, Function, JsLifetime, Module, Object, Value,
+};
+use std::sync::LazyLock;
+use std::{cell::RefCell, future::Future, pin::Pin};
 use tauri::{
     async_runtime::{block_on, channel},
     AppHandle,
 };
-use include_json::include_json;
-use minijinja::context;
-use std::sync::LazyLock;
-use rquickjs::module::{Declarations, Exports, ModuleDef};
-use crate::tauri_app::js_chordsapp::ChordsappModule;
 
 const BUILTIN_MODULES: LazyLock<Vec<String>> = LazyLock::new(|| {
-  let json: serde_json::Value = include_json!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../data/builtin-modules.json"
-  ));
-  serde_json::from_value(json).expect("failed to parse builtin-modules.json")
+    let json: serde_json::Value = include_json!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../data/builtin-modules.json"
+    ));
+    serde_json::from_value(json).expect("failed to parse builtin-modules.json")
 });
 
 struct JsEngine {
@@ -46,78 +49,44 @@ impl<'js> Trace<'js> for AppUserData {
 
 #[derive(Debug, Default)]
 struct ModuleResolver {
-    builtin_resolver: BuiltinResolver,
+    llrt_resolver: llrt_modules::module::resolver::ModuleResolver,
+}
+
+impl ModuleResolver {
+    pub fn new(llrt_resolver: llrt_modules::module::resolver::ModuleResolver) -> Self {
+        Self {
+            llrt_resolver: llrt_modules::module::resolver::ModuleResolver::default(),
+        }
+    }
 }
 
 impl Resolver for ModuleResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
-      let name = name.trim_start_matches("node:").trim_end_matches("/");
-      if BUILTIN_MODULES.contains(&name.to_string()) {
-        return Ok(name.into());
-      }
+        // `.` from `.js`
+        if (name.contains(".") || name == "chordsapp") {
+            return Ok(name.into());
+        }
 
-      match name {
-      // Special-cased to prevent a cycle
-          "module" => Ok("module".into()),
-          "chordsapp" => Ok("chordsapp".into()),
-          _ => Ok(name.into()),
-        // _ => self.builtin_resolver.resolve(ctx, base, name),
-      }
+        self.llrt_resolver.resolve(ctx, base, name)
     }
 }
 
 #[derive(Debug, Default)]
 struct ModuleLoader {
-    builtin_loader: BuiltinLoader,
+    llrt_loader: llrt_modules::module::loader::ModuleLoader,
 }
 
-
-pub struct ModuleModule;
-
-impl ModuleDef for ModuleModule {
-    fn declare(declare: &Declarations) -> rquickjs::Result<()> {
-        declare.declare("createRequire")?;
-        Ok(())
-    }
-
-    fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> rquickjs::Result<()> {
-        println!("ModuleModule::evaluate");
-        let create_require = Function::new(
-            ctx.clone(),
-            |ctx: Ctx<'js>| -> rquickjs::Result<Function<'js>> {
-                ctx.eval("(function() { globalThis.require })")
-            },
-        )?
-            .with_name("createRequire")?;
-
-        exports.export("createRequire", create_require)?;
-        Ok(())
+impl ModuleLoader {
+    pub fn new(llrt_loader: llrt_modules::module::loader::ModuleLoader) -> Self {
+        Self { llrt_loader }
     }
 }
 
 fn get_module<'js>(ctx: &Ctx<'js>, name: &str) -> rquickjs::Result<Option<Module<'js, Declared>>> {
     println!("name: {}", name);
-    let name = name.trim_start_matches("node:").trim_end_matches("/");
     let module = match name {
-        "fs" => Module::declare_def::<llrt_fs::FsModule, _>(ctx.clone(), "fs"),
-        "os" => Module::declare_def::<llrt_os::OsModule, _>(ctx.clone(), "os"),
-        "util" => Module::declare_def::<llrt_util::UtilModule, _>(ctx.clone(), "util"),
-        "child_process" => Module::declare_def::<llrt_child_process::ChildProcessModule, _>(
-            ctx.clone(),
-            "child_process",
-        ),
-        "process" => {
-            Module::declare_def::<llrt_process::ProcessModule, _>(ctx.clone(), "process")
-        }
-        "path" => Module::declare_def::<llrt_path::PathModule, _>(ctx.clone(), "path"),
-        "console" => {
-            Module::declare_def::<llrt_console::ConsoleModule, _>(ctx.clone(), "console")
-        }
-        "buffer" => Module::declare_def::<llrt_buffer::BufferModule, _>(ctx.clone(), "buffer"),
-        "module" => Module::declare_def::<ModuleModule, _>(ctx.clone(), "module"),
-        "chordsapp" => Module::declare_def::<ChordsappModule, _>( ctx.clone(), "chordsapp"),
-        // "crypto" => Module::declare_def::<llrt_crypto::CryptoModule, _>(ctx.clone(), "crypto"),
-        _ => return Ok(None)
+        "chordsapp" => Module::declare_def::<ChordsappModule, _>(ctx.clone(), "chordsapp"),
+        _ => return Ok(None),
     };
 
     Some(module).transpose()
@@ -128,38 +97,44 @@ impl Loader for ModuleLoader {
         let module = get_module(ctx, name)?;
         Ok(match module {
             Some(module) => module,
-            None => self.builtin_loader.load(ctx, name)?
+            None => self.llrt_loader.load(ctx, name)?,
         })
     }
 }
 
-async fn ensure_engine(handle: AppHandle) -> Result<AsyncContext, String> {
+async fn ensure_engine(handle: AppHandle) -> anyhow::Result<AsyncContext> {
     let existing = JS_ENGINE.with(|cell| cell.borrow().as_ref().map(|engine| engine.ctx.clone()));
     if let Some(ctx) = existing {
         return Ok(ctx);
     }
 
-    let rt = AsyncRuntime::new().map_err(|err| err.to_string())?;
-    rt.set_loader(ModuleResolver::default(), ModuleLoader::default())
-        .await;
+    let rt = AsyncRuntime::new()?;
+    let module_builder = llrt_modules::module_builder::ModuleBuilder::default();
+    let (llrt_module_resolver, llrt_module_loader, global_attachment) = module_builder.build();
 
-    let ctx = AsyncContext::full(&rt)
-        .await
-        .map_err(|err| err.to_string())?;
+    rt.set_loader(
+        ModuleResolver::new(llrt_module_resolver),
+        ModuleLoader::new(llrt_module_loader),
+    )
+    .await;
 
-    ctx.with(|ctx| init_globals(ctx, handle.clone()))
-        .await
-        .map_err(|err| format_js_error_fallback(err))?;
-
-    let out = ctx.clone();
+    let context = AsyncContext::full(&rt).await?;
+    async_with!(context => |ctx| {
+        global_attachment.attach(&ctx);
+        ctx.store_userdata(AppUserData { handle });
+    });
 
     // Deno makes the app super slow
     // JS_WORKER.with(move |cell| {
     //     *cell.borrow_mut() = Some(main_worker);
     // });
 
-   JS_ENGINE.with(|cell| {
-        *cell.borrow_mut() = Some(JsEngine { _rt: rt, ctx });
+    let out = context.clone();
+    JS_ENGINE.with(|cell| {
+        *cell.borrow_mut() = Some(JsEngine {
+            _rt: rt,
+            ctx: context,
+        });
     });
 
     Ok(out)
@@ -172,37 +147,32 @@ unsafe fn uplift<'a, 'b, T>(fut: LocalBoxFuture<'a, T>) -> SendBoxFuture<'b, T> 
     std::mem::transmute(fut)
 }
 
-pub async fn with_js<F, R>(handle: AppHandle, f: F) -> Result<R, String>
+pub async fn with_js<F, R>(handle: AppHandle, f: F) -> anyhow::Result<R>
 where
-    F: Send + 'static + for<'js> FnOnce(Ctx<'js>) -> LocalBoxFuture<'js, rquickjs::Result<R>>,
+    F: Send + 'static + for<'js> FnOnce(Ctx<'js>) -> LocalBoxFuture<'js, anyhow::Result<R>>,
     R: Send + 'static,
 {
     let (tx, mut rx) = channel(1);
 
-    handle.clone()
-        .run_on_main_thread(move || {
-            let result = block_on(async move {
-                let async_ctx: AsyncContext = ensure_engine(handle).await?;
+    handle.clone().run_on_main_thread(move || {
+        let result = block_on(async move {
+            let async_ctx: AsyncContext = ensure_engine(handle).await?;
 
-                async_ctx
-                    .async_with(|ctx| {
-                        let fut = f(ctx.clone());
+            async_ctx
+                .async_with(|ctx| {
+                    let fut = f(ctx.clone());
+                    let fut = Box::pin(async move { fut.await });
+                    unsafe { uplift(fut) }
+                })
+                .await
+        });
 
-                        let fut =
-                            Box::pin(async move { fut.await.map_err(|e| format_js_error(ctx, e)) });
-
-                        unsafe { uplift(fut) }
-                    })
-                    .await
-            });
-
-            let _ = tx.try_send(result);
-        })
-        .map_err(|e| e.to_string())?;
+        let _ = tx.try_send(result);
+    })?;
 
     rx.recv()
         .await
-        .ok_or_else(|| "main thread task dropped".to_string())?
+        .ok_or_else(|| anyhow::anyhow!("main thread task dropped"))?
 }
 
 pub fn throw_any_js_error(ctx: Ctx<'_>, err: Error) -> Error {
@@ -211,7 +181,9 @@ pub fn throw_any_js_error(ctx: Ctx<'_>, err: Error) -> Error {
             let value = ctx.catch();
 
             if let Some(ex) = value.as_exception() {
-                let name = ex.get::<_, String>("name").unwrap_or_else(|_| "Error".into());
+                let name = ex
+                    .get::<_, String>("name")
+                    .unwrap_or_else(|_| "Error".into());
                 let message = ex
                     .get::<_, String>("message")
                     .unwrap_or_else(|_| "Unknown JS error".into());
@@ -236,7 +208,6 @@ pub fn throw_any_js_error(ctx: Ctx<'_>, err: Error) -> Error {
 }
 
 pub fn throw_js_error(ctx: Ctx<'_>, message: impl Into<String>) -> Error {
-
     let message = message.into();
 
     let thrown = (|| -> rquickjs::Result<Value<'_>> {
@@ -251,38 +222,6 @@ pub fn throw_js_error(ctx: Ctx<'_>, message: impl Into<String>) -> Error {
 }
 
 fn init_globals(ctx: Ctx<'_>, handle: AppHandle) -> rquickjs::Result<()> {
-    llrt_process::init(&ctx)?;
-    llrt_console::init(&ctx)?;
-    llrt_buffer::init(&ctx)?;
-
-    let quickjs_require_template = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../data/quickjs-require.jinja.js"));
-    let env = minijinja::Environment::new();
-    let quickjs_require_js = env.render_str(
-        quickjs_require_template,
-        context!(builtinModules => &*BUILTIN_MODULES),
-    ).map_err(|err| throw_js_error(ctx.clone(), err.to_string()))?;
-
-    log::debug!("Evaluating quickjs-require.js:\n{}", quickjs_require_js);
-    match Module::evaluate(ctx.clone(), "require", quickjs_require_js.as_bytes()) {
-        Ok(promise) => {
-            // if let Err(err) = promise.into_future::<()>().await {
-            //     log::error!(
-            //         "Failed to await quickjs-require.js: {}",
-            //         err
-            //     );
-            // }
-        },
-        Err(err) => {
-            log::error!(
-                "Failed to evaluate quickjs-require.js: {}",
-                throw_any_js_error(ctx.clone(), err)
-            );
-        }
-    };
-
-
-    ctx.store_userdata(AppUserData { handle })?;
-
     Ok(())
 }
 

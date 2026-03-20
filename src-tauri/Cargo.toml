@@ -48,16 +48,18 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 rquickjs = {  version = "0.11.0", features = ["full-async"] }
 mac-keycode = "0.0.2"
 fast_radix_trie = "1.1.0"
-llrt_path = { git = "https://github.com/awslabs/llrt", package = "llrt_path" }
-llrt_fs = { git = "https://github.com/awslabs/llrt", package = "llrt_fs" }
-llrt_os = { git = "https://github.com/awslabs/llrt", package = "llrt_os" }
-llrt_util = { git = "https://github.com/awslabs/llrt", package = "llrt_util" }
-llrt_child_process = { git = "https://github.com/awslabs/llrt", package = "llrt_child_process" }
-llrt_process = { git = "https://github.com/awslabs/llrt", package = "llrt_process" }
-llrt_console = { git = "https://github.com/awslabs/llrt", package = "llrt_console" }
-llrt_buffer = { git = "https://github.com/awslabs/llrt", package = "llrt_buffer" }
-# Currently broken by a missing trait impl
-# llrt_crypto = { git = "https://github.com/awslabs/llrt", package = "llrt_crypto" }
+llrt_modules = { git = "https://github.com/awslabs/llrt", package = "llrt_modules", features = [
+    "path",
+    "fs",
+    "os",
+    "util",
+    "child-process",
+    "process",
+    "console",
+    "buffer",
+    # Currently broken by a missing trait impl
+    # "crypto",
+] }
 rquickjs-serde = "0.5.0"
 tauri-plugin-store = "2"
 jsonc-parser = "0.31.0"

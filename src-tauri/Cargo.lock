@@ -692,6 +692,7 @@ dependencies = [
  "frontmost",
  "gix",
  "include_dir",
+ "jsonc-parser",
  "keycode",
  "libc",
  "llrt_buffer",
@@ -3568,6 +3569,12 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
 ]
+
+[[package]]
+name = "jsonc-parser"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45157f76d8fbe134e0c97403d69ac48989a1e0249a058b20f9f5eeff11bb09f0"
 
 [[package]]
 name = "jsonptr"

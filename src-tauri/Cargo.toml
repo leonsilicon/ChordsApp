@@ -60,6 +60,7 @@ llrt_buffer = { git = "https://github.com/awslabs/llrt", package = "llrt_buffer"
 # llrt_crypto = { git = "https://github.com/awslabs/llrt", package = "llrt_crypto" }
 rquickjs-serde = "0.5.0"
 tauri-plugin-store = "2"
+jsonc-parser = "0.31.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.2"

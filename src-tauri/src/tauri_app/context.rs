@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
+use crate::tauri_app::store::GlobalHotkeyStore;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,10 +29,6 @@ pub struct ActiveChordInfo {
     pub action: String,
 }
 
-static GLOBAL_HOTKEYS_POOL: Vec<String> = vec![
-    "cmd+opt+a"
-];
-
 pub struct AppContext {
     pub chorder: Chorder,
 
@@ -40,12 +37,14 @@ pub struct AppContext {
     pub frontmost_application_id: ArcSwap<Option<String>>,
     pub key_event_state: KeyEventState,
 
+    pub global_hotkey_store: GlobalHotkeyStore,
+
     // Not a mutex since it uses Atomics
     app_mode_state_machine: Arc<AppModeStateMachine>,
 }
 
 impl AppContext {
-    pub fn new(chorder: Chorder, bundled_app_chords: LoadedAppChords) -> Self {
+    pub fn new(chorder: Chorder, bundled_app_chords: LoadedAppChords, global_hotkey_store: GlobalHotkeyStore) -> Self {
         let device_state = if macos_accessibility_client::accessibility::application_is_trusted() {
             Some(DeviceState {})
         } else {
@@ -59,6 +58,7 @@ impl AppContext {
             frontmost_application_id: ArcSwap::new(Arc::new(None)),
             key_event_state: KeyEventState::new(app_mode_state_machine.clone()),
             loaded_app_chords: RwLock::new(bundled_app_chords),
+            global_hotkey_store,
             app_mode_state_machine,
             chorder,
         }

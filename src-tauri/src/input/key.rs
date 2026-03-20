@@ -2,9 +2,50 @@ use anyhow::Result;
 use keycode::KeyMappingCode;
 use keycode::KeyMappingCode::*;
 use std::str::FromStr;
+use std::fmt;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct KeyCombination {
+    pub key: Key,
+    pub modifiers: KeyCombinationModifiers,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct KeyCombinationModifiers {
+    pub alt: bool,
+    pub ctrl: bool,
+    pub meta: bool,
+    pub shift: bool,
+}
+
+impl KeyCombination {
+    pub fn serialize(&self) -> String {
+        let mut parts: Vec<&str> = Vec::new();
+
+        // Sorted alphabetically for storage stability
+        if self.modifiers.alt {
+            parts.push("alt");
+        }
+        if self.modifiers.ctrl {
+            parts.push("ctrl");
+        }
+        if self.modifiers.meta {
+            parts.push("meta");
+        }
+        if self.modifiers.shift {
+            parts.push("shift");
+        }
+
+        let key = self.key.to_char(false).unwrap_or_default().to_string();
+        parts.push(&key);
+
+        parts.join("+")
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key(pub KeyMappingCode);
+
 
 impl Key {
     pub fn modifiers() -> Vec<Self> {

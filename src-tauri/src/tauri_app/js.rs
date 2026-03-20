@@ -1,10 +1,7 @@
 use crate::chords::{press_shortcut, release_shortcut, Shortcut};
-use rquickjs::{
-    loader::{BuiltinLoader, BuiltinResolver, Loader, Resolver},
-    module::Declared,
-    AsyncContext, AsyncRuntime, Ctx, Error, Function, Module, Object, Value,
-};
+use rquickjs::{loader::{BuiltinLoader, BuiltinResolver, Loader, Resolver}, module::Declared, AsyncContext, AsyncRuntime, Ctx, Error, Function, JsLifetime, Module, Object, Value};
 use std::{cell::RefCell, future::Future, pin::Pin};
+use rquickjs::class::{Trace, Tracer};
 use tauri::{
     async_runtime::{block_on, channel},
     AppHandle,
@@ -18,6 +15,20 @@ struct JsEngine {
 
 thread_local! {
     static JS_ENGINE: RefCell<Option<JsEngine>> = RefCell::new(None);
+}
+
+pub struct AppUserData {
+    pub handle: AppHandle,
+}
+
+// This tells rquickjs "this type does not contain JS references"
+unsafe impl<'js> JsLifetime<'js> for AppUserData {
+    type Changed<'to> = AppUserData;
+}
+
+// Usually safe because AppHandle doesn't hold JS values
+impl<'js> Trace<'js> for AppUserData {
+    fn trace(&self, _tracer: Tracer<'_, 'js>) {}
 }
 
 #[derive(Debug, Default)]
@@ -79,7 +90,7 @@ impl Loader for ModuleLoader {
     }
 }
 
-async fn ensure_engine() -> Result<AsyncContext, String> {
+async fn ensure_engine(handle: AppHandle) -> Result<AsyncContext, String> {
     let existing = JS_ENGINE.with(|cell| cell.borrow().as_ref().map(|engine| engine.ctx.clone()));
     if let Some(ctx) = existing {
         return Ok(ctx);
@@ -93,7 +104,7 @@ async fn ensure_engine() -> Result<AsyncContext, String> {
         .await
         .map_err(|err| err.to_string())?;
 
-    ctx.with(init_globals)
+    ctx.with(|ctx| init_globals(ctx, handle.clone()))
         .await
         .map_err(|err| format_js_error_fallback(err))?;
 
@@ -120,10 +131,10 @@ where
 {
     let (tx, mut rx) = channel(1);
 
-    handle
+    handle.clone()
         .run_on_main_thread(move || {
             let result = block_on(async move {
-                let async_ctx: AsyncContext = ensure_engine().await?;
+                let async_ctx: AsyncContext = ensure_engine(handle).await?;
 
                 async_ctx
                     .async_with(|ctx| {
@@ -160,10 +171,12 @@ pub fn throw_js_error(ctx: Ctx<'_>, message: impl Into<String>) -> Error {
     }
 }
 
-fn init_globals(ctx: Ctx<'_>) -> rquickjs::Result<()> {
+fn init_globals(ctx: Ctx<'_>, handle: AppHandle) -> rquickjs::Result<()> {
     llrt_process::init(&ctx)?;
     llrt_console::init(&ctx)?;
     llrt_buffer::init(&ctx)?;
+
+    ctx.store_userdata(AppUserData { handle })?;
 
     Ok(())
 }

@@ -13,6 +13,8 @@ pub use tauri_app::*;
 use tauri_nspanel::tauri_panel;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_store::StoreExt;
+use tauri_app::store::GlobalHotkeyStore;
 
 mod chords;
 mod constants;
@@ -161,6 +163,7 @@ fn setup(app: &mut tauri::App) -> Result<()> {
     });
 
     let handle = app.handle().clone();
+    let global_hotkey_store = GlobalHotkeyStore::new(app.store("global-hotkeys.json")?);
     let chorder = {
         let window = handle
             .get_webview_window(crate::constants::INDICATOR_WINDOW_LABEL)
@@ -168,7 +171,7 @@ fn setup(app: &mut tauri::App) -> Result<()> {
         Chorder::new(ChorderIndicatorPanel::from_window(window)?)
     };
     let bundled_app_chords = LoadedAppChords::from_folders(vec![ChordFolder::load_bundled()?])?;
-    let context = AppContext::new(chorder, bundled_app_chords);
+    let context = AppContext::new(chorder, bundled_app_chords, global_hotkey_store);
     // Setting the frontmost application immediately (the frontmost crate only detects changes)
     let workspace = NSWorkspace::sharedWorkspace();
     if let Some(application) = workspace.frontmostApplication() {

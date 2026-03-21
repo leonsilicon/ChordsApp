@@ -13,6 +13,7 @@ use tauri::{
     async_runtime::{block_on, channel},
     AppHandle,
 };
+use llrt_readline::{ReadlineModule, ReadlinePromisesModule};
 
 const BUILTIN_MODULES: LazyLock<Vec<String>> = LazyLock::new(|| {
     let json: serde_json::Value = include_json!(concat!(
@@ -61,8 +62,12 @@ impl ModuleResolver {
 impl Resolver for ModuleResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         // `.` from `.js`
-        if (name.contains(".") || name == "chordsapp") {
+        if name.contains(".") || name == "chordsapp" {
             return Ok(name.into());
+        }
+
+        if name == "readline" || name == "node:readline" || name == "readline/promises" || name == "node:readline/promises" {
+            return Ok("readline".into());
         }
 
         self.llrt_resolver.resolve(ctx, base, name)
@@ -81,9 +86,10 @@ impl ModuleLoader {
 }
 
 fn get_module<'js>(ctx: &Ctx<'js>, name: &str) -> rquickjs::Result<Option<Module<'js, Declared>>> {
-    println!("name: {}", name);
     let module = match name {
         "chordsapp" => Module::declare_def::<ChordsappModule, _>(ctx.clone(), "chordsapp"),
+        "readline" | "node:readline" => Module::declare_def::<ReadlineModule, _>(ctx.clone(), "readline"),
+        "readline/promises" | "node:readline/promises" => Module::declare_def::<ReadlinePromisesModule, _>(ctx.clone(), "readline/promises"),
         _ => return Ok(None),
     };
 

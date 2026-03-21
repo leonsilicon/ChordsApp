@@ -1112,6 +1112,7 @@ dependencies = [
  "libc",
  "llrt_core",
  "llrt_modules",
+ "llrt_readline",
  "log",
  "mac-keycode",
  "macos-accessibility-client 0.0.2",
@@ -6221,6 +6222,16 @@ version = "0.8.1-beta"
 source = "git+https://github.com/awslabs/llrt#36bd4a837d3fd85b5e3246906f23b1873c067503"
 dependencies = [
  "libc",
+ "llrt_utils",
+ "rquickjs",
+]
+
+[[package]]
+name = "llrt_readline"
+version = "0.8.1-beta"
+dependencies = [
+ "llrt_context",
+ "llrt_events",
  "llrt_utils",
  "rquickjs",
 ]

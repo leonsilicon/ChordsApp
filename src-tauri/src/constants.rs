@@ -1,22 +1,21 @@
-use std::str::FromStr;
-use std::sync::LazyLock;
-use anyhow::{bail, Context};
-use jsonc_parser::{JsonValue, ParseOptions};
 use crate::chords::Shortcut;
 use crate::input::{Key, KeyCombination, KeyCombinationModifiers};
+use anyhow::{bail, Context};
+use jsonc_parser::{JsonValue, ParseOptions};
+use std::str::FromStr;
+use std::sync::LazyLock;
 
 pub const SETTINGS_MENU_ID: &str = "settings";
 pub const QUIT_MENU_ID: &str = "quit";
 pub const INDICATOR_WINDOW_LABEL: &str = "indicator";
 
-pub static GLOBAL_HOTKEYS_POOL: LazyLock<Vec<KeyCombination>> = LazyLock::new(|| {
-    load_hotkeys().expect("failed to load GLOBAL_HOTKEYS_POOL")
-});
+pub static GLOBAL_HOTKEYS_POOL: LazyLock<Vec<KeyCombination>> =
+    LazyLock::new(|| load_hotkeys().expect("failed to load GLOBAL_HOTKEYS_POOL"));
 
 fn load_hotkeys() -> anyhow::Result<Vec<KeyCombination>> {
     let data = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../data/global-hotkey-pool.jsonc"
+        env!("CARGO_MANIFEST_DIR"),
+        "/../data/global-hotkey-pool.jsonc"
     ));
 
     let parsed = jsonc_parser::parse_to_value(data, &ParseOptions::default())
@@ -59,7 +58,10 @@ fn load_hotkeys() -> anyhow::Result<Vec<KeyCombination>> {
             shift: parse_flag("s")?,
         };
 
-        result.push(KeyCombination { key: Key::from_str(&key)?, modifiers });
+        result.push(KeyCombination {
+            key: Key::from_str(&key)?,
+            modifiers,
+        });
     }
 
     Ok(result)

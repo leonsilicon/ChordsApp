@@ -9,11 +9,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
+use tauri_app::store::GlobalHotkeyStore;
 pub use tauri_app::*;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_store::StoreExt;
-use tauri_app::store::GlobalHotkeyStore;
 
 mod chords;
 mod constants;
@@ -185,7 +185,6 @@ fn setup(app: &mut tauri::App) -> Result<()> {
 
     tauri_app::tray::create_tray(handle.clone()).context("failed to create tray")?;
     tauri_app::settings::configure_settings_window(handle.clone())?;
-
 
     let frontmost = Frontmost {
         frontmost: String::new(),

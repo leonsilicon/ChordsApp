@@ -11,14 +11,19 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChordJsInvocation {
+    pub export_name: Option<String>,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Chord {
     pub keys: Vec<Key>,
     pub name: String,
     pub shortcut: Option<Shortcut>,
     pub shell: Option<String>,
-    // TODO: support non-string arguments
-    pub args: Option<Vec<String>>,
+    pub js: Option<ChordJsInvocation>,
 }
 
 pub struct LoadedAppChords {
@@ -378,12 +383,12 @@ fn log_shell_output(shell: &str, output: std::process::Output) {
 fn invoke_js_chord_in_background(
     handle: AppHandle,
     module_path: String,
-    args: Vec<String>,
+    invocation: ChordJsInvocation,
     num_times: usize,
 ) {
     tauri::async_runtime::spawn(async move {
         if let Err(e) = with_js(handle.clone(), move |ctx| {
-            Box::pin(call_js_default_export(ctx, module_path, args, num_times))
+            Box::pin(call_js_export(ctx, module_path, invocation, num_times))
         })
         .await
         {
@@ -392,10 +397,10 @@ fn invoke_js_chord_in_background(
     });
 }
 
-async fn call_js_default_export<'js>(
+async fn call_js_export<'js>(
     ctx: Ctx<'js>,
     module_path: String,
-    args: Vec<String>,
+    invocation: ChordJsInvocation,
     num_times: usize,
 ) -> anyhow::Result<()> {
     for _ in 0..num_times {
@@ -403,22 +408,29 @@ async fn call_js_default_export<'js>(
             return Ok(());
         };
 
-        let Some(default_function) = get_default_export_function(ctx.clone(), &namespace).await
+        let Some(function) =
+            get_export_function(ctx.clone(), &namespace, invocation.export_name.as_deref()).await
         else {
             return Ok(());
         };
 
-        let Some(js_args) = convert_js_args(&ctx, args.clone()) else {
+        let Some(js_args) = convert_js_args(&ctx, invocation.args.clone()) else {
             return Ok(());
         };
 
-        log::debug!("Calling default function with arguments: {:?}", js_args);
+        let export_name = invocation.export_name.as_deref().unwrap_or("default");
+        log::debug!(
+            "Calling JS export `{}` with arguments: {:?}",
+            export_name,
+            js_args
+        );
 
-        let result = match call_function_with_values(ctx.clone(), default_function, js_args) {
+        let result = match call_function_with_values(ctx.clone(), function, js_args) {
             Ok(value) => value,
             Err(e) => {
                 log::error!(
-                    "Failed to call default function: {}",
+                    "Failed to call JS export `{}`: {}",
+                    export_name,
                     format_js_error(ctx.clone(), e)
                 );
                 return Ok(());
@@ -433,7 +445,8 @@ async fn call_js_default_export<'js>(
             }
             Err(e) => {
                 log::error!(
-                    "Default function promise rejected: {}",
+                    "JS export `{}` promise rejected: {}",
+                    export_name,
                     format_js_error(ctx.clone(), e)
                 );
             }
@@ -467,40 +480,45 @@ async fn import_js_namespace<'js>(ctx: Ctx<'js>, module_path: &str) -> Option<Ob
     }
 }
 
-async fn get_default_export_function<'js>(
+async fn get_export_function<'js>(
     ctx: Ctx<'js>,
     namespace: &Object<'js>,
+    export_name: Option<&str>,
 ) -> Option<Function<'js>> {
-    let default: Value<'js> = match namespace.get("default") {
-        Ok(default) => default,
+    let export_name = export_name.unwrap_or("default");
+    let export: Value<'js> = match namespace.get(export_name) {
+        Ok(export) => export,
         Err(e) => {
             log::error!(
-                "Failed to get default export: {}",
+                "Failed to get JS export `{}`: {}",
+                export_name,
                 format_js_error(ctx.clone(), e)
             );
             return None;
         }
     };
 
-    log::debug!("Default export: {:?}", default);
-    let resolved: Value<'js> = if let Some(promise) = default.as_promise().cloned() {
+    log::debug!("JS export `{}`: {:?}", export_name, export);
+    let resolved: Value<'js> = if let Some(promise) = export.as_promise().cloned() {
         match promise.into_future::<Value<'js>>().await {
             Ok(value) => value,
             Err(e) => {
                 log::error!(
-                    "Failed to resolve default export promise: {}",
+                    "Failed to resolve JS export `{}` promise: {}",
+                    export_name,
                     format_js_error(ctx.clone(), e)
                 );
                 return None;
             }
         }
     } else {
-        default
+        export
     };
 
     let Some(function) = resolved.as_function().cloned() else {
         log::error!(
-            "Default export did not resolve to a function: {:?}",
+            "JS export `{}` did not resolve to a function: {:?}",
+            export_name,
             resolved
         );
         return None;
@@ -577,8 +595,8 @@ pub fn press_chord(
         return Ok(());
     }
 
-    if let Some(args) = chord_payload.chord.args.clone() {
-        invoke_js_chord_in_background(handle, runtime.path.clone(), args, chord_payload.num_times);
+    if let Some(js) = chord_payload.chord.js.clone() {
+        invoke_js_chord_in_background(handle, runtime.path.clone(), js, chord_payload.num_times);
     }
 
     Ok(())

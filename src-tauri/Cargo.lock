@@ -8121,6 +8121,7 @@ dependencies = [
  "serde",
  "serde_json",
  "winapi",
+ "x11",
 ]
 
 [[package]]

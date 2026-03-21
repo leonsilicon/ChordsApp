@@ -45,7 +45,6 @@ impl KeyCombination {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key(pub KeyMappingCode);
 
-
 impl Key {
     pub fn modifiers() -> Vec<Self> {
         vec![

@@ -2,6 +2,7 @@ use crate::chords::LoadedAppChords;
 use crate::feature::Chorder;
 use crate::git::load_all_chord_folders;
 use crate::js::{format_js_error, with_js};
+use crate::tauri_app::store::GlobalHotkeyStore;
 use crate::{
     input::KeyEventState,
     mode::{AppMode, AppModeStateMachine},
@@ -17,7 +18,6 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
-use crate::tauri_app::store::GlobalHotkeyStore;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -200,7 +200,7 @@ pub async fn load_chord_files_runtime_modules(
                         Ok(meta) => meta,
                         Err(e) => {
                             log::error!("Failed to get import.meta for module {}", path);
-                            return Ok(())
+                            return Ok(());
                         }
                     };
 
@@ -302,8 +302,9 @@ fn format_action(chord: &crate::chords::Chord) -> String {
         return format!("Shell: {shell}");
     }
 
-    if let Some(args) = &chord.args {
-        return format!("Args: {:?}", args);
+    if let Some(js) = &chord.js {
+        let export_name = js.export_name.as_deref().unwrap_or("default");
+        return format!("JS: {}({:?})", export_name, js.args);
     }
 
     "No action".to_string()

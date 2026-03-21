@@ -176,11 +176,17 @@ module = '''
 export default (commandId: string) => {
   // ...
 }
+
+export const menu = (...segments: string[]) => {
+  // ...
+}
 '''
 
 [chords]
 # `explorer.newFile` doesn't have a default shortcut in VSCode
 fh = { name = "File: Here", args = ["explorer.newFile"] }
+# `menu:args` calls the named `menu` export instead of `default`
+mc = { name = "Menu: Columns", 'menu:args' = ["View", "Columns"] }
 # ...
 ```
 

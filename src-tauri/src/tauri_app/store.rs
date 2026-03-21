@@ -1,15 +1,14 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri_plugin_store::Store;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 use tauri::Wry;
+use tauri_plugin_store::Store;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GlobalHotkeyStoreEntry {
     pub bundle_id: String,
     pub hotkey_id: String,
 }
-
 
 #[derive(Clone)]
 pub struct GlobalHotkeyStore {

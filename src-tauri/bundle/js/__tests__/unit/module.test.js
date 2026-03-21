@@ -1,1 +1,0 @@
-import e from"node:module";import t from"module";it("node:module should be the same as module",()=>{expect(e).toStrictEqual(t)});var{createRequire:r}=e;it("should resolve 'node:module via createRequire()",()=>{let o=r(import.meta.url);expect(o("node:module").createRequire).toBeDefined()});

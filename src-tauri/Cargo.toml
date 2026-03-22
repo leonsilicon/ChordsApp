@@ -55,6 +55,8 @@ mac-keycode = "0.0.2"
 fast_radix_trie = "1.1.0"
 llrt_modules = { git = "https://github.com/awslabs/llrt", package = "llrt_modules" }
 llrt_core = { git = "https://github.com/awslabs/llrt", package = "llrt_core", features = ['no-sdk', 'uncompressed'] }
+# We need to manually enable all features
+llrt_os = { git = "https://github.com/awslabs/llrt", package = "llrt_os", default-features = true }
 llrt_readline = { path = "./crates/llrt_readline" }
 rquickjs-serde = "0.5.0"
 tauri-plugin-store = "2"
@@ -69,9 +71,10 @@ include_json = "*"
 #deno_ast = "0.53.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
 objc2 = "0.6.2"
-objc2-app-kit = "0.3.1"
-objc2-foundation = "0.3.1"
+objc2-app-kit = { version = "0.3.1", features = ["block2"] }
+objc2-foundation = { version = "0.3.1", features = ["block2"] }
 macos-accessibility-client = "0.0.2"
 frontmost = "1.1.0"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1", version = "2.1.0" }
@@ -85,3 +88,4 @@ frontmost = { path = "./crates/frontmost" }
 
 [patch."https://github.com/awslabs/llrt"]
 llrt_core = { path = "./crates/llrt_core" }
+llrt_net = { path = "./crates/llrt_net" }

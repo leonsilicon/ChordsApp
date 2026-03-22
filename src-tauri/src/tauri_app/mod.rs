@@ -1,3 +1,4 @@
+mod app_lifecycle;
 pub mod commands;
 mod context;
 pub mod js;

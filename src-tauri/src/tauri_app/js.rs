@@ -169,6 +169,7 @@ pub async fn reset_js(handle: AppHandle) -> anyhow::Result<()> {
     let (tx, mut rx) = channel(1);
 
     handle.run_on_main_thread(move || {
+        crate::tauri_app::app_lifecycle::clear_callbacks();
         JS_ENGINE.with(|cell| {
             *cell.borrow_mut() = None;
         });

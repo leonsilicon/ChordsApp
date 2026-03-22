@@ -1,0 +1,27 @@
+[package]
+name = "llrt_net"
+description = "LLRT Module net"
+version = "0.8.1-beta"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/awslabs/llrt"
+readme = "README.md"
+
+[lib]
+name = "llrt_net"
+path = "src/lib.rs"
+
+[dependencies]
+itoa = { version = "1", default-features = false }
+llrt_buffer = { git = "https://github.com/awslabs/llrt", package = "llrt_buffer" }
+llrt_context = { git = "https://github.com/awslabs/llrt", package = "llrt_context" }
+llrt_events = { git = "https://github.com/awslabs/llrt", package = "llrt_events" }
+llrt_stream = { git = "https://github.com/awslabs/llrt", package = "llrt_stream" }
+llrt_utils = { git = "https://github.com/awslabs/llrt", package = "llrt_utils", default-features = false }
+rquickjs = { version = "0.11", default-features = false }
+tokio = { version = "1", features = ["net"], default-features = false }
+tracing = { version = "0.1", default-features = false }
+
+[dev-dependencies]
+llrt_test = { path = "../../libs/llrt_test" }
+rand = { version = "0.10.0", features = ["alloc"], default-features = false }

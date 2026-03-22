@@ -1,14 +1,32 @@
+use crate::tauri_app::app_lifecycle::{
+    init as init_app_lifecycle, register_app_launch_handler, register_app_terminate_handler,
+};
 use crate::chords::{press_shortcut, release_shortcut, Shortcut};
 use crate::constants::GLOBAL_HOTKEYS_POOL;
 use crate::js::{throw_js_error, AppUserData};
 use crate::store::{GlobalHotkeyStore, GlobalHotkeyStoreEntry};
 use rquickjs::module::{Declarations, Exports, ModuleDef};
-use rquickjs::{Ctx, Function, Value};
+use rquickjs::{Ctx, Function};
 use std::collections::HashSet;
-use tauri::AppHandle;
-use tauri_plugin_store::{Store, StoreExt};
+use tauri_plugin_store::StoreExt;
 
 pub struct ChordsappModule;
+
+fn on_app_launch<'js>(
+    ctx: Ctx<'js>,
+    bundle_id: String,
+    callback: Function<'js>,
+) -> rquickjs::Result<()> {
+    register_app_launch_handler(ctx, bundle_id, callback)
+}
+
+fn on_app_terminate<'js>(
+    ctx: Ctx<'js>,
+    bundle_id: String,
+    callback: Function<'js>,
+) -> rquickjs::Result<()> {
+    register_app_terminate_handler(ctx, bundle_id, callback)
+}
 
 impl ModuleDef for ChordsappModule {
     fn declare(declare: &Declarations) -> rquickjs::Result<()> {
@@ -17,10 +35,16 @@ impl ModuleDef for ChordsappModule {
         declare.declare("tap")?;
         declare.declare("getGlobalHotkey")?;
         declare.declare("registerGlobalHotkey")?;
+        declare.declare("onAppLaunch")?;
+        declare.declare("onAppTerminate")?;
         Ok(())
     }
 
     fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> rquickjs::Result<()> {
+        let userdata = ctx.userdata::<AppUserData>().unwrap();
+        let handle = &userdata.handle;
+        init_app_lifecycle(handle.clone());
+
         let press = Function::new(
             ctx.clone(),
             |ctx: Ctx<'_>, key: String| -> rquickjs::Result<()> {
@@ -85,8 +109,6 @@ impl ModuleDef for ChordsappModule {
         .with_name("tap")?;
         exports.export("tap", tap)?;
 
-        let userdata = ctx.userdata::<AppUserData>().unwrap();
-        let handle = &userdata.handle;
         let global_hotkeys_store =
             GlobalHotkeyStore::new(handle.store("global-hotkeys.json").map_err(|err| {
                 throw_js_error(
@@ -158,6 +180,13 @@ impl ModuleDef for ChordsappModule {
             )?
             .with_name("getGlobalHotkey")?;
         exports.export("getGlobalHotkey", get_global_hotkey)?;
+
+        let on_app_launch = Function::new(ctx.clone(), on_app_launch)?.with_name("onAppLaunch")?;
+        exports.export("onAppLaunch", on_app_launch)?;
+
+        let on_app_terminate =
+            Function::new(ctx.clone(), on_app_terminate)?.with_name("onAppTerminate")?;
+        exports.export("onAppTerminate", on_app_terminate)?;
 
         Ok(())
     }

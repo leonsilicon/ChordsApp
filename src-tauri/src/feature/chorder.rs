@@ -142,7 +142,7 @@ impl Chorder {
                         state.key_buffer,
                         context.frontmost_application_id.load().as_ref().clone()
                     );
-                    return Ok(())
+                    return Ok(());
                 };
 
                 let Some(chord_payload) = chord_runtime.get_chord(&key_buffer) else {

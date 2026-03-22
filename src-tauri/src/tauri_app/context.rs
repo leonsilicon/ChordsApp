@@ -1,7 +1,7 @@
 use crate::chords::LoadedAppChords;
 use crate::feature::Chorder;
-use crate::git::load_all_chord_folders;
-use crate::js::{format_js_error, with_js};
+use crate::js::{format_js_error, reset_js, with_js};
+use crate::sources::load_all_chord_folders;
 use crate::tauri_app::store::GlobalHotkeyStore;
 use crate::{
     input::KeyEventState,
@@ -83,6 +83,7 @@ pub async fn reload_loaded_app_chords(app: AppHandle) -> Result<()> {
 
     // Load all JS files as modules
     let chord_folders = load_all_chord_folders(app.clone())?;
+    reset_js(app.clone()).await?;
 
     // Load all JS files as modules, but keep `chord_folders` so we can use it later.
     for chord_folder in &chord_folders {

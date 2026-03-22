@@ -17,6 +17,7 @@
     "core:window:allow-set-focus",
     "core:window:allow-show",
     "core:window:allow-unminimize",
+    "fs:read-dirs",
     "store:default"
   ]
 }

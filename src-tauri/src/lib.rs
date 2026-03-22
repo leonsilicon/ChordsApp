@@ -21,6 +21,7 @@ mod feature;
 mod git;
 mod input;
 mod mode;
+mod sources;
 mod tauri_app;
 
 use tauri_nspanel::tauri_panel;
@@ -107,8 +108,12 @@ pub fn run() {
             tauri_app::commands::list_git_repos,
             tauri_app::commands::add_git_repo_command,
             tauri_app::commands::sync_git_repo_command,
+            tauri_app::commands::list_local_chord_folders_command,
+            tauri_app::commands::pick_local_chord_folder_command,
+            tauri_app::commands::add_local_chord_folder_command,
             tauri_app::commands::list_active_chords_command,
             tauri_app::commands::list_repo_chords_command,
+            tauri_app::commands::list_local_chord_folder_chords_command,
             tauri_app::commands::open_accessibility_settings,
             tauri_app::commands::open_input_monitoring_settings,
         ])
@@ -136,6 +141,7 @@ pub fn run() {
             }
         })
         .plugin(tauri_plugin_macos_permissions::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_user_input::init())

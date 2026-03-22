@@ -1,4 +1,8 @@
 use crate::git::{add_git_repo, discover_git_repos, load_repo_chords, sync_git_repo, GitRepoInfo};
+use crate::sources::{
+    add_local_chord_folder, list_local_chord_folders, load_local_chord_folder_chords,
+    pick_local_chord_folder, LocalChordFolderInfo,
+};
 use crate::tauri_app::context::{
     list_active_chords, list_loaded_chords, reload_loaded_app_chords, ActiveChordInfo,
 };
@@ -50,6 +54,31 @@ pub async fn sync_git_repo_command(app: AppHandle, repo: String) -> Result<GitRe
 }
 
 #[tauri::command]
+pub fn list_local_chord_folders_command(
+    app: AppHandle,
+) -> Result<Vec<LocalChordFolderInfo>, String> {
+    list_local_chord_folders(app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn pick_local_chord_folder_command(app: AppHandle) -> Result<Option<String>, String> {
+    pick_local_chord_folder(app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn add_local_chord_folder_command(
+    app: AppHandle,
+    path: String,
+) -> Result<LocalChordFolderInfo, String> {
+    let folder_info =
+        add_local_chord_folder(app.clone(), &path).map_err(|error| error.to_string())?;
+    reload_loaded_app_chords(app)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(folder_info)
+}
+
+#[tauri::command]
 pub fn list_active_chords_command(app: AppHandle) -> Result<Vec<ActiveChordInfo>, String> {
     list_active_chords(app).map_err(|error| error.to_string())
 }
@@ -60,5 +89,15 @@ pub fn list_repo_chords_command(
     repo: String,
 ) -> Result<Vec<ActiveChordInfo>, String> {
     let loaded_chords = load_repo_chords(app, &repo).map_err(|error| error.to_string())?;
+    Ok(list_loaded_chords(&loaded_chords))
+}
+
+#[tauri::command]
+pub fn list_local_chord_folder_chords_command(
+    app: AppHandle,
+    path: String,
+) -> Result<Vec<ActiveChordInfo>, String> {
+    let loaded_chords =
+        load_local_chord_folder_chords(app, &path).map_err(|error| error.to_string())?;
     Ok(list_loaded_chords(&loaded_chords))
 }

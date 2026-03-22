@@ -39,6 +39,11 @@ type GitRepoInfo = {
   headShortSha: string | null;
 };
 
+type LocalChordFolderInfo = {
+  name: string;
+  localPath: string;
+};
+
 type ActiveChordInfo = {
   scope: string;
   scopeKind: "global" | "app";
@@ -56,6 +61,24 @@ type ChordGroup = {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function validateLocalChordFolder(path: string) {
+  const fsApi = window.__TAURI__?.fs;
+  if (!fsApi) {
+    throw new Error("Filesystem plugin is not available.");
+  }
+
+  const exists = await fsApi.exists(path);
+  if (!exists) {
+    throw new Error("Selected folder is no longer available.");
+  }
+
+  const entries = await fsApi.readDir(path);
+  const hasChordsDirectory = entries.some((entry) => entry.isDirectory && entry.name === "chords");
+  if (!hasChordsDirectory) {
+    throw new Error("Selected folder must contain a top-level chords directory.");
+  }
 }
 
 function compareChordGroups(left: ChordGroup, right: ChordGroup) {
@@ -178,6 +201,9 @@ export function SettingsWindow() {
   const [repoInput, setRepoInput] = useState("");
   const [addingRepo, setAddingRepo] = useState(false);
   const [syncingRepo, setSyncingRepo] = useState<string | null>(null);
+  const [localChordFolders, setLocalChordFolders] = useState<LocalChordFolderInfo[]>([]);
+  const [localChordFoldersBusy, setLocalChordFoldersBusy] = useState(true);
+  const [addingLocalChordFolder, setAddingLocalChordFolder] = useState(false);
   const [activeChords, setActiveChords] = useState<ActiveChordInfo[]>([]);
   const [activeChordsBusy, setActiveChordsBusy] = useState(true);
   const [chordSearch, setChordSearch] = useState("");
@@ -186,6 +212,14 @@ export function SettingsWindow() {
   const [repoChordsBusy, setRepoChordsBusy] = useState<Record<string, boolean>>({});
   const [openRepoChords, setOpenRepoChords] = useState<Record<string, boolean>>({});
   const [openRepoChordGroups, setOpenRepoChordGroups] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
+  const [localFolderChordsByPath, setLocalFolderChordsByPath] = useState<
+    Record<string, ActiveChordInfo[]>
+  >({});
+  const [localFolderChordsBusy, setLocalFolderChordsBusy] = useState<Record<string, boolean>>({});
+  const [openLocalFolderChords, setOpenLocalFolderChords] = useState<Record<string, boolean>>({});
+  const [openLocalFolderChordGroups, setOpenLocalFolderChordGroups] = useState<
     Record<string, Record<string, boolean>>
   >({});
 
@@ -261,6 +295,33 @@ export function SettingsWindow() {
     }
   }
 
+  async function refreshLocalChordFolders(options?: {
+    showSuccessToast?: boolean;
+    showErrorToast?: boolean;
+  }) {
+    const { showSuccessToast = false, showErrorToast = true } = options ?? {};
+    setLocalChordFoldersBusy(true);
+
+    try {
+      const nextFolders = await invoke<LocalChordFolderInfo[]>("list_local_chord_folders_command");
+      setLocalChordFolders(nextFolders);
+
+      if (showSuccessToast) {
+        toast.success("Local folder list refreshed.");
+      }
+
+      return nextFolders;
+    } catch (error) {
+      const message = `Failed to load local folders: ${getErrorMessage(error)}`;
+      if (showErrorToast) {
+        toast.error(message);
+      }
+      return [];
+    } finally {
+      setLocalChordFoldersBusy(false);
+    }
+  }
+
   async function refreshActiveChords(options?: {
     showSuccessToast?: boolean;
     showErrorToast?: boolean;
@@ -324,6 +385,47 @@ export function SettingsWindow() {
       return [];
     } finally {
       setRepoChordsBusy((current) => ({ ...current, [repoSlug]: false }));
+    }
+  }
+
+  async function refreshLocalFolderChords(
+    folderPath: string,
+    options?: { showSuccessToast?: boolean; showErrorToast?: boolean },
+  ) {
+    const { showSuccessToast = false, showErrorToast = true } = options ?? {};
+    setLocalFolderChordsBusy((current) => ({ ...current, [folderPath]: true }));
+
+    try {
+      const nextChords = await invoke<ActiveChordInfo[]>("list_local_chord_folder_chords_command", {
+        path: folderPath,
+      });
+      setLocalFolderChordsByPath((current) => ({ ...current, [folderPath]: nextChords }));
+      setOpenLocalFolderChordGroups((current) => {
+        const next = { ...(current[folderPath] ?? {}) };
+
+        for (const chord of nextChords) {
+          const groupKey = `${chord.scopeKind}:${chord.scope}`;
+          if (next[groupKey] === undefined) {
+            next[groupKey] = chord.scopeKind === "global";
+          }
+        }
+
+        return { ...current, [folderPath]: next };
+      });
+
+      if (showSuccessToast) {
+        toast.success("Loaded chords from local folder.");
+      }
+
+      return nextChords;
+    } catch (error) {
+      const message = `Failed to load local folder chords: ${getErrorMessage(error)}`;
+      if (showErrorToast) {
+        toast.error(message);
+      }
+      return [];
+    } finally {
+      setLocalFolderChordsBusy((current) => ({ ...current, [folderPath]: false }));
     }
   }
 
@@ -456,6 +558,39 @@ export function SettingsWindow() {
     }
   }
 
+  async function handleAddLocalChordFolder() {
+    let selectedPath: string | null = null;
+
+    try {
+      selectedPath = await invoke<string | null>("pick_local_chord_folder_command");
+      if (!selectedPath) {
+        return;
+      }
+    } catch (error) {
+      toast.error(`Failed to choose folder: ${getErrorMessage(error)}`);
+      return;
+    }
+
+    setAddingLocalChordFolder(true);
+    const toastId = toast.loading("Adding local folder...");
+
+    try {
+      await validateLocalChordFolder(selectedPath);
+      const addedFolder = await invoke<LocalChordFolderInfo>("add_local_chord_folder_command", {
+        path: selectedPath,
+      });
+      await Promise.all([
+        refreshLocalChordFolders({ showErrorToast: false }),
+        refreshActiveChords({ showErrorToast: false }),
+      ]);
+      toast.success(`Added ${addedFolder.name}.`, { id: toastId });
+    } catch (error) {
+      toast.error(`Failed to add local folder: ${getErrorMessage(error)}`, { id: toastId });
+    } finally {
+      setAddingLocalChordFolder(false);
+    }
+  }
+
   async function handleSyncRepo(repoSlug: string) {
     setSyncingRepo(repoSlug);
     const toastId = toast.loading(`Syncing ${repoSlug}...`);
@@ -507,6 +642,16 @@ export function SettingsWindow() {
     await refreshRepoChords(repoSlug);
   }
 
+  async function handleLocalFolderChordsToggle(folderPath: string, nextOpen: boolean) {
+    setOpenLocalFolderChords((current) => ({ ...current, [folderPath]: nextOpen }));
+
+    if (!nextOpen || localFolderChordsByPath[folderPath] || localFolderChordsBusy[folderPath]) {
+      return;
+    }
+
+    await refreshLocalFolderChords(folderPath);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -517,6 +662,7 @@ export function SettingsWindow() {
           refreshInputMonitoringPermissionState(),
           refreshAutostartState(),
           refreshRepos({ showErrorToast: true }),
+          refreshLocalChordFolders({ showErrorToast: true }),
           refreshActiveChords({ showErrorToast: true }),
         ]);
       } catch (error) {
@@ -565,11 +711,11 @@ export function SettingsWindow() {
           <div>
             <h1 className="text-[20px] font-semibold">Chords</h1>
             <p className="mt-1 text-muted-foreground">
-              Configure the tray app, manage chord repos, and inspect the active chord registry.
+              Configure the tray app, manage chord sources, and inspect the active chord registry.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{repos.length} repos</Badge>
+            <Badge variant="outline">{repos.length + localChordFolders.length} sources</Badge>
             <Badge variant="outline">{activeChords.length} chords</Badge>
           </div>
         </div>
@@ -700,6 +846,117 @@ export function SettingsWindow() {
                                     ...current,
                                     [repo.slug]: {
                                       ...(current[repo.slug] ?? {}),
+                                      [groupKey]: open,
+                                    },
+                                  }));
+                                }}
+                              />
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Local Folders</CardTitle>
+                    <CardDescription>
+                      Local folders are loaded in place. Use the tray reload action after editing
+                      files to rebuild the JS runtime.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void refreshLocalChordFolders({ showSuccessToast: true });
+                    }}
+                    disabled={localChordFoldersBusy || addingLocalChordFolder}
+                  >
+                    {localChordFoldersBusy ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      void handleAddLocalChordFolder();
+                    }}
+                    disabled={addingLocalChordFolder}
+                  >
+                    {addingLocalChordFolder ? "Adding..." : "Add Folder"}
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {localChordFoldersBusy ? (
+                    <p className="text-sm text-muted-foreground">Loading local folders...</p>
+                  ) : localChordFolders.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No local folders added yet.
+                    </p>
+                  ) : (
+                    localChordFolders.map((folder) => (
+                      <div
+                        key={folder.localPath}
+                        className="rounded-lg border bg-background/80 px-3 py-3"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate font-medium">{folder.name}</p>
+                              <Badge variant="secondary">Local</Badge>
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {folder.localPath}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                void handleLocalFolderChordsToggle(
+                                  folder.localPath,
+                                  !openLocalFolderChords[folder.localPath],
+                                );
+                              }}
+                              disabled={localFolderChordsBusy[folder.localPath] === true}
+                            >
+                              {openLocalFolderChords[folder.localPath] ? "Hide Chords" : "View Chords"}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <Collapsible open={openLocalFolderChords[folder.localPath] === true}>
+                          <CollapsibleContent className="pt-3">
+                            {localFolderChordsBusy[folder.localPath] === true ? (
+                              <p className="text-sm text-muted-foreground">
+                                Loading chords from {folder.name}...
+                              </p>
+                            ) : (localFolderChordsByPath[folder.localPath]?.length ?? 0) === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No chords found in {folder.name}.
+                              </p>
+                            ) : (
+                              <ChordGroupList
+                                groups={buildChordGroups(localFolderChordsByPath[folder.localPath] ?? [])}
+                                openGroups={openLocalFolderChordGroups[folder.localPath] ?? {}}
+                                onGroupOpenChange={(groupKey, open) => {
+                                  setOpenLocalFolderChordGroups((current) => ({
+                                    ...current,
+                                    [folder.localPath]: {
+                                      ...(current[folder.localPath] ?? {}),
                                       [groupKey]: open,
                                     },
                                   }));

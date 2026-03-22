@@ -165,6 +165,24 @@ async fn ensure_engine(handle: AppHandle) -> anyhow::Result<AsyncContext> {
     Ok(out)
 }
 
+pub async fn reset_js(handle: AppHandle) -> anyhow::Result<()> {
+    let (tx, mut rx) = channel(1);
+
+    handle.run_on_main_thread(move || {
+        JS_ENGINE.with(|cell| {
+            *cell.borrow_mut() = None;
+        });
+
+        let _ = tx.try_send(Ok::<(), anyhow::Error>(()));
+    })?;
+
+    rx.recv()
+        .await
+        .ok_or_else(|| anyhow::anyhow!("main thread task dropped"))??;
+
+    Ok(())
+}
+
 type LocalBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 type SendBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 

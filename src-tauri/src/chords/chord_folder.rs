@@ -2,7 +2,7 @@ use crate::chords::AppChordsFile;
 use anyhow::Result;
 use fast_radix_trie::StringRadixMap;
 use include_dir::{include_dir, Dir};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug)]
@@ -37,15 +37,19 @@ impl ChordFolder {
     }
 
     pub fn load_from_git_repo(repo: &gix::Repository) -> Result<Self> {
-        let mut js_files = StringRadixMap::new();
-        let mut chords_files = StringRadixMap::new();
-
         let root = repo
             .workdir()
             .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?;
 
+        Self::load_from_local_folder(root)
+    }
+
+    pub fn load_from_local_folder(root: &Path) -> Result<Self> {
+        let mut js_files = StringRadixMap::new();
+        let mut chords_files = StringRadixMap::new();
+
         if root.exists() {
-            for entry in WalkDir::new(&root) {
+            for entry in WalkDir::new(root) {
                 let entry = entry?;
                 let path = entry.path();
 
@@ -53,7 +57,7 @@ impl ChordFolder {
                     continue;
                 }
 
-                let relative_path = path.strip_prefix(&root)?.to_path_buf();
+                let relative_path = path.strip_prefix(root)?.to_path_buf();
 
                 // ------------------------
                 // Handle chords/**/macos.toml

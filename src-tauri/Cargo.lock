@@ -1133,6 +1133,7 @@ dependencies = [
  "tauri-nspanel",
  "tauri-plugin-autostart",
  "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-log",
  "tauri-plugin-macos-permissions",
  "tauri-plugin-opener",

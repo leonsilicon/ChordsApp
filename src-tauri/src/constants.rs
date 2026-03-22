@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 pub const SETTINGS_MENU_ID: &str = "settings";
+pub const RELOAD_CONFIGS_MENU_ID: &str = "reload-configs";
 pub const QUIT_MENU_ID: &str = "quit";
 pub const INDICATOR_WINDOW_LABEL: &str = "indicator";
 

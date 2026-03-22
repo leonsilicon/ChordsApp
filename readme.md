@@ -4,7 +4,7 @@
 
 > This app isn't ready for general use. It's currently only released as a way for me to dogfood it myself.
 
-**Chords** introduces the _chord_, an alternative to keyboard shortcuts which let you trigger actions by typing plain letters and numbers without modifier keys.
+**Chords** introduces the _chord_, an alternative to keyboard shortcuts which let you trigger actions by typing plain characters without modifier keys.
 
 ## How does it work?
 

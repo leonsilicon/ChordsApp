@@ -73,7 +73,7 @@ jobs:
 
       - name: Build and publish Tauri app (macOS)
         if: startsWith(matrix.platform, 'macos')
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}

@@ -7,7 +7,7 @@ import {
   isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, ChevronRight, ExternalLink } from "lucide-react";
+import { Check, ChevronRight, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   checkAccessibilityPermission,
@@ -50,6 +50,12 @@ type ActiveChordInfo = {
   sequence: string;
   name: string;
   action: string;
+};
+
+type GlobalShortcutMappingInfo = {
+  shortcut: string;
+  bundleId: string;
+  hotkeyId: string;
 };
 
 type ChordGroup = {
@@ -207,6 +213,10 @@ export function SettingsWindow() {
   const [activeChords, setActiveChords] = useState<ActiveChordInfo[]>([]);
   const [activeChordsBusy, setActiveChordsBusy] = useState(true);
   const [chordSearch, setChordSearch] = useState("");
+  const [globalShortcutMappings, setGlobalShortcutMappings] = useState<GlobalShortcutMappingInfo[]>([]);
+  const [globalShortcutMappingsBusy, setGlobalShortcutMappingsBusy] = useState(true);
+  const [globalShortcutSearch, setGlobalShortcutSearch] = useState("");
+  const [removingGlobalShortcut, setRemovingGlobalShortcut] = useState<string | null>(null);
   const [openChordGroups, setOpenChordGroups] = useState<Record<string, boolean>>({});
   const [repoChordsByRepo, setRepoChordsByRepo] = useState<Record<string, ActiveChordInfo[]>>({});
   const [repoChordsBusy, setRepoChordsBusy] = useState<Record<string, boolean>>({});
@@ -346,6 +356,35 @@ export function SettingsWindow() {
       return [];
     } finally {
       setActiveChordsBusy(false);
+    }
+  }
+
+  async function refreshGlobalShortcutMappings(options?: {
+    showSuccessToast?: boolean;
+    showErrorToast?: boolean;
+  }) {
+    const { showSuccessToast = false, showErrorToast = true } = options ?? {};
+    setGlobalShortcutMappingsBusy(true);
+
+    try {
+      const nextMappings = await invoke<GlobalShortcutMappingInfo[]>(
+        "list_global_shortcut_mappings_command",
+      );
+      setGlobalShortcutMappings(nextMappings);
+
+      if (showSuccessToast) {
+        toast.success("Global shortcut mappings refreshed.");
+      }
+
+      return nextMappings;
+    } catch (error) {
+      const message = `Failed to load global shortcut mappings: ${getErrorMessage(error)}`;
+      if (showErrorToast) {
+        toast.error(message);
+      }
+      return [];
+    } finally {
+      setGlobalShortcutMappingsBusy(false);
     }
   }
 
@@ -652,6 +691,22 @@ export function SettingsWindow() {
     await refreshLocalFolderChords(folderPath);
   }
 
+  async function handleRemoveGlobalShortcutMapping(shortcut: string) {
+    setRemovingGlobalShortcut(shortcut);
+
+    try {
+      await invoke("remove_global_shortcut_mapping_command", { shortcut });
+      setGlobalShortcutMappings((current) =>
+        current.filter((mapping) => mapping.shortcut !== shortcut),
+      );
+      toast.success(`Removed ${shortcut}.`);
+    } catch (error) {
+      toast.error(`Failed to remove ${shortcut}: ${getErrorMessage(error)}`);
+    } finally {
+      setRemovingGlobalShortcut(null);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -664,6 +719,7 @@ export function SettingsWindow() {
           refreshRepos({ showErrorToast: true }),
           refreshLocalChordFolders({ showErrorToast: true }),
           refreshActiveChords({ showErrorToast: true }),
+          refreshGlobalShortcutMappings({ showErrorToast: true }),
         ]);
       } catch (error) {
         if (!cancelled) {
@@ -703,6 +759,14 @@ export function SettingsWindow() {
       )
     : activeChords;
   const chordGroups = buildChordGroups(filteredActiveChords);
+  const normalizedGlobalShortcutSearch = globalShortcutSearch.trim().toLowerCase();
+  const filteredGlobalShortcutMappings = normalizedGlobalShortcutSearch
+    ? globalShortcutMappings.filter((mapping) =>
+        [mapping.shortcut, mapping.bundleId, mapping.hotkeyId].some((value) =>
+          value.toLowerCase().includes(normalizedGlobalShortcutSearch),
+        ),
+      )
+    : globalShortcutMappings;
 
   return (
     <div className="min-h-full bg-muted/30 px-5 py-4 text-sm text-foreground">
@@ -717,6 +781,7 @@ export function SettingsWindow() {
           <div className="flex items-center gap-2">
             <Badge variant="outline">{repos.length + localChordFolders.length} sources</Badge>
             <Badge variant="outline">{activeChords.length} chords</Badge>
+            <Badge variant="outline">{globalShortcutMappings.length} shortcuts</Badge>
           </div>
         </div>
 
@@ -724,6 +789,7 @@ export function SettingsWindow() {
           <TabsList>
             <TabsTrigger value="settings">Settings</TabsTrigger>
             <TabsTrigger value="active-chords">Active Chords</TabsTrigger>
+            <TabsTrigger value="global-shortcuts">Global Shortcuts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="settings" className="space-y-4">
@@ -1136,6 +1202,102 @@ export function SettingsWindow() {
                       }));
                     }}
                   />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="global-shortcuts">
+            <Card size="sm">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Global Shortcut Mappings</CardTitle>
+                    <CardDescription>
+                      Current shortcut assignments stored in `global-hotkeys.json`.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void refreshGlobalShortcutMappings({ showSuccessToast: true });
+                    }}
+                    disabled={globalShortcutMappingsBusy}
+                  >
+                    {globalShortcutMappingsBusy ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Input
+                    value={globalShortcutSearch}
+                    onChange={(event) => {
+                      setGlobalShortcutSearch(event.target.value);
+                    }}
+                    placeholder="Filter by shortcut, app bundle ID, or hotkey ID"
+                  />
+                  <Badge variant="outline" className="self-start sm:self-center">
+                    {filteredGlobalShortcutMappings.length} mappings
+                  </Badge>
+                </div>
+
+                {globalShortcutMappingsBusy ? (
+                  <p className="text-sm text-muted-foreground">Loading global shortcut mappings...</p>
+                ) : globalShortcutMappings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No global shortcut mappings are currently registered.
+                  </p>
+                ) : filteredGlobalShortcutMappings.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No global shortcut mappings match that filter.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredGlobalShortcutMappings.map((mapping) => {
+                      const isRemoving = removingGlobalShortcut === mapping.shortcut;
+
+                      return (
+                        <div
+                          key={mapping.shortcut}
+                          className="flex items-start justify-between gap-3 rounded-lg border bg-background/80 px-3 py-3"
+                        >
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="font-mono text-[11px]">
+                                {mapping.shortcut}
+                              </Badge>
+                            </div>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              <p className="break-all">
+                                <span className="font-medium text-foreground">App:</span>{" "}
+                                {mapping.bundleId}
+                              </p>
+                              <p className="break-all">
+                                <span className="font-medium text-foreground">Hotkey:</span>{" "}
+                                {mapping.hotkeyId}
+                              </p>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Remove ${mapping.shortcut}`}
+                            title="Remove mapping"
+                            onClick={() => {
+                              void handleRemoveGlobalShortcutMapping(mapping.shortcut);
+                            }}
+                            disabled={isRemoving}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>

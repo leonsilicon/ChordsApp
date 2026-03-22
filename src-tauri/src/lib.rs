@@ -114,6 +114,8 @@ pub fn run() {
             tauri_app::commands::list_active_chords_command,
             tauri_app::commands::list_repo_chords_command,
             tauri_app::commands::list_local_chord_folder_chords_command,
+            tauri_app::commands::list_global_shortcut_mappings_command,
+            tauri_app::commands::remove_global_shortcut_mapping_command,
             tauri_app::commands::open_accessibility_settings,
             tauri_app::commands::open_input_monitoring_settings,
         ])
